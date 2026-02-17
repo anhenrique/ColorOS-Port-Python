@@ -5,6 +5,7 @@ from pathlib import Path
 from src.core.config import Config
 from src.core.rom import RomPackage
 from src.core.context import Context
+from src.core.tools import ToolManager
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -32,6 +33,9 @@ def main():
     work_dir = Path(args.work_dir).resolve()
     work_dir.mkdir(parents=True, exist_ok=True)
 
+    # Initialize Tools
+    tools = ToolManager(Path("bin").resolve())
+
     # Initialize ROM Packages
     logger.info("Initializing ROM packages...")
     baserom = RomPackage(args.baserom, work_dir / "baserom", "BaseROM")
@@ -39,8 +43,8 @@ def main():
 
     # Extract ROMs
     try:
-        baserom.extract()
-        portrom.extract()
+        baserom.extract(tools)
+        portrom.extract(tools)
     except Exception as e:
         logger.error(f"Failed to extract ROMs: {e}")
         sys.exit(1)
