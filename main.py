@@ -1,6 +1,7 @@
 import argparse
 import logging
 import sys
+import re
 from pathlib import Path
 from src.core.config import Config
 from src.core.rom import RomPackage
@@ -21,13 +22,32 @@ def parse_args():
     parser.add_argument("--work_dir", default="build", help="Working directory")
     return parser.parse_args()
 
+def detect_device_code(rom_path: str, args_device_code: str | None = None) -> str | None:
+    # Priority 1: User Argument
+    if args_device_code:
+        return args_device_code
+    
+    # Priority 2: Filename pattern "ColorOS_<CODE>_..."
+    filename = Path(rom_path).name
+    match = re.search(r"ColorOS_([^_]+)_", filename)
+    if match:
+        code = match.group(1)
+        logger.info(f"Detected device code from filename: {code}")
+        return code
+    
+    # Priority 3: Fallback (original script default: op8t)
+    return None
+
 def main():
     args = parse_args()
     
+    # 1. Initial Device Code Detection (Filename/Args)
+    device_code = detect_device_code(args.baserom, args.device_code)
+    
     # Load configuration
     try:
-        config = Config.load(args.device_code)
-        logger.info(f"Loaded configuration for device: {args.device_code if args.device_code else 'common'}")
+        config = Config.load(device_code)
+        logger.info(f"Loaded configuration for device: {device_code if device_code else 'common (initial)'}")
     except Exception as e:
         logger.error(f"Failed to load configuration: {e}")
         sys.exit(1)
@@ -50,8 +70,33 @@ def main():
     except Exception as e:
         logger.error(f"Failed to extract ROMs: {e}")
         sys.exit(1)
+    
+    # 2. Refined Device Code Detection (After Extraction)
+    # Check my_manifest/build.prop: ro.oplus.version.my_manifest
+    if not device_code:
+        manifest_prop = baserom.images_dir / "my_manifest/build.prop"
+        if manifest_prop.exists():
+            try:
+                with open(manifest_prop, 'r', errors='ignore') as f:
+                    for line in f:
+                        if "ro.oplus.version.my_manifest=" in line:
+                            # e.g. ro.oplus.version.my_manifest=PJE110_11.C.26_...
+                            val = line.split('=')[1].strip()
+                            device_code = val.split('_')[0]
+                            logger.info(f"Detected device code from build.prop: {device_code}")
+                            break
+            except Exception as e:
+                logger.warning(f"Could not read device code from manifest: {e}")
+        
+        # If successfully detected now, reload config
+        if device_code:
+            try:
+                config = Config.load(device_code)
+                logger.info(f"Reloaded configuration for detected device: {device_code}")
+            except Exception as e:
+                logger.warning(f"Failed to reload config for {device_code}, using common config.")
 
-    # Initialize Context
+    # Initialize Context with finalized config
     logger.info("Initializing Porting Context...")
     ctx = Context(config, baserom, portrom, work_dir) 
     
