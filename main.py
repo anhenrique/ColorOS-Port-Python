@@ -3,6 +3,8 @@ import logging
 import sys
 from pathlib import Path
 from src.core.config import Config
+from src.core.rom import RomPackage
+from src.core.context import Context
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -27,13 +29,31 @@ def main():
         logger.error(f"Failed to load configuration: {e}")
         sys.exit(1)
 
-    # Initialize Context (Placeholder)
+    work_dir = Path(args.work_dir).resolve()
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    # Initialize ROM Packages
+    logger.info("Initializing ROM packages...")
+    baserom = RomPackage(args.baserom, work_dir / "baserom", "BaseROM")
+    portrom = RomPackage(args.portrom, work_dir / "portrom", "PortROM")
+
+    # Extract ROMs
+    try:
+        baserom.extract()
+        portrom.extract()
+    except Exception as e:
+        logger.error(f"Failed to extract ROMs: {e}")
+        sys.exit(1)
+
+    # Initialize Context
     logger.info("Initializing Porting Context...")
-    # ctx = Context(config, args) 
+    ctx = Context(config, baserom, portrom, work_dir) 
     
     # Start Porting Process
     logger.info("Starting porting process...")
-    # ctx.run()
+    ctx.install_partitions()
+    
+    logger.info("Porting process (Stage 1: Partition Installation) complete.")
 
 if __name__ == "__main__":
     main()

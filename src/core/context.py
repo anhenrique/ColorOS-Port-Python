@@ -4,7 +4,7 @@ from src.core.config import Config
 from src.core.rom import RomPackage
 
 class Context:
-    def __init__(self, config: Config, baserom: RomPackage, portrom: RomPackage, work_dir: str):
+    def __init__(self, config: Config, baserom: RomPackage, portrom: RomPackage, work_dir: str | Path):
         self.config = config
         self.baserom = baserom
         self.portrom = portrom
