@@ -17,14 +17,13 @@ class Context:
         self._init_workspace()
 
     def _init_workspace(self):
-        if self.build_dir.exists():
-            shutil.rmtree(self.build_dir)
+        # if self.build_dir.exists():
+        #     shutil.rmtree(self.build_dir)
         self.build_dir.mkdir(parents=True, exist_ok=True)
         self.target_dir.mkdir(parents=True, exist_ok=True)
         self.repack_dir.mkdir(parents=True, exist_ok=True)
 
     def install_partitions(self):
-        # Iterate partitions from config and copy from appropriate source
         for part in self.config.possible_super_list:
              if part in self.config.partition_to_port:
                  self._copy_partition(part, self.portrom)
@@ -32,6 +31,5 @@ class Context:
                  self._copy_partition(part, self.baserom)
 
     def _copy_partition(self, partition, source_rom):
-        # Logic to copy partition directory/image from source_rom to target_dir
-        # Placeholder
-        pass
+        target_path = self.target_dir / partition
+        source_rom.extract_partition(partition, target_path)
