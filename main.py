@@ -7,6 +7,7 @@ from src.core.rom import RomPackage
 from src.core.context import Context
 from src.core.tools import ToolManager
 from src.core.props import PropertyModifier
+from src.core.patcher import SmaliPatcher
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -63,7 +64,12 @@ def main():
     prop_modifier = PropertyModifier(ctx)
     prop_modifier.run()
 
-    logger.info("Porting process (Stage 1 & 2) complete.")
+    # Stage 3: Smali Patching
+    logger.info("Starting Stage 3: Smali Patching...")
+    patcher = SmaliPatcher(ctx)
+    patcher.run()
+
+    logger.info("Porting process (Stage 1-3) complete.")
 
 if __name__ == "__main__":
     main()
