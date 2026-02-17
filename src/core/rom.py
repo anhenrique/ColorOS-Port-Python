@@ -18,3 +18,8 @@ class RomPackage:
         # Retrieve a property from build.prop files within the ROM
         # Placeholder for property retrieval logic
         return None
+
+    def extract_partition(self, partition_name, target_dir):
+        # Extracts a partition image to a directory
+        # Placeholder logic
+        pass
