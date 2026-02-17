@@ -6,6 +6,7 @@ from src.core.config import Config
 from src.core.rom import RomPackage
 from src.core.context import Context
 from src.core.tools import ToolManager
+from src.core.props import PropertyModifier
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -53,11 +54,16 @@ def main():
     logger.info("Initializing Porting Context...")
     ctx = Context(config, baserom, portrom, work_dir) 
     
-    # Start Porting Process
-    logger.info("Starting porting process...")
+    # Stage 1: Install Partitions
+    logger.info("Starting Stage 1: Partition Installation...")
     ctx.install_partitions()
     
-    logger.info("Porting process (Stage 1: Partition Installation) complete.")
+    # Stage 2: Property Modification
+    logger.info("Starting Stage 2: Property Modification...")
+    prop_modifier = PropertyModifier(ctx)
+    prop_modifier.run()
+
+    logger.info("Porting process (Stage 1 & 2) complete.")
 
 if __name__ == "__main__":
     main()
