@@ -33,9 +33,9 @@ class PropertyModifier:
                         return line.split('=', 1)[1].strip()
             return None
 
-        # Base ROM Info - read from extracted partitions
-        base_system_prop = self.ctx.baserom.extracted_dir / "system/build.prop"
-        base_manifest_prop = self.ctx.baserom.extracted_dir / "my_manifest/build.prop"
+        # Base ROM Info - read from extracted partitions (build/baserom/extracted/system/system/build.prop)
+        base_system_prop = self.ctx.baserom.extracted_dir / "system" / "system" / "build.prop"
+        base_manifest_prop = self.ctx.baserom.extracted_dir / "my_manifest" / "build.prop"
         
         self.base_android_version = read_prop(base_system_prop, "ro.build.version.release")
         self.base_android_sdk = read_prop(base_system_prop, "ro.system.build.version.sdk")
@@ -45,8 +45,8 @@ class PropertyModifier:
              self.base_device_code = self.base_device_code.split('_')[0]
 
         # Port ROM Info
-        port_system_prop = self.ctx.portrom.extracted_dir / "system/build.prop"
-        port_manifest_prop = self.ctx.portrom.extracted_dir / "my_manifest/build.prop"
+        port_system_prop = self.ctx.portrom.extracted_dir / "system" / "system" / "build.prop"
+        port_manifest_prop = self.ctx.portrom.extracted_dir / "my_manifest" / "build.prop"
         
         self.port_android_version = read_prop(port_system_prop, "ro.build.version.release")
         self.port_android_sdk = read_prop(port_system_prop, "ro.system.build.version.sdk")
@@ -59,7 +59,7 @@ class PropertyModifier:
         logger.info(f"Port Android: {self.port_android_version}, SDK: {self.port_android_sdk}")
         
     def _modify_build_props(self):
-        target_manifest_prop = self.target_dir / "my_manifest/build.prop"
+        target_manifest_prop = self.target_dir / "my_manifest" / "build.prop"
         
         if not target_manifest_prop.exists():
             logger.warning(f"{target_manifest_prop} not found, skipping specific modifications.")
@@ -77,7 +77,7 @@ class PropertyModifier:
                        replace_display_id)
 
         # 2. Update ro.product.first_api_level
-        base_manifest_prop = self.ctx.baserom.extracted_dir / "my_manifest/build.prop"
+        base_manifest_prop = self.ctx.baserom.extracted_dir / "my_manifest" / "build.prop"
         base_first_api = self._read_prop_value(base_manifest_prop, "ro.product.first_api_level")
         
         if base_first_api:

@@ -612,8 +612,8 @@ class FrameworkModifier:
         self.bin_dir = Path("bin").resolve()
         
         self.apktool_path = self.bin_dir / "apktool" / "apktool"
-        self.apkeditor_path = self.bin_dir / "APKEditor.jar"
-        self.baksmali_path = self.bin_dir / "baksmali.jar"
+        self.apkeditor_path = self.bin_dir / "apktool" / "APKEditor.jar"
+        self.baksmali_path = self.bin_dir / "apktool" / "baksmali.jar"
         
         self.RETRUN_TRUE = ".locals 1\n    const/4 v0, 0x1\n    return v0"
         self.RETRUN_FALSE = ".locals 1\n    const/4 v0, 0x0\n    return v0"
