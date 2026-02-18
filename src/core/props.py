@@ -27,7 +27,9 @@ class PropertyModifier:
                 return None
             with open(file_path, 'r', errors='ignore') as f:
                 for line in f:
-                    if line.strip().startswith(key + "="):
+                    line = line.strip()
+                    # Skip empty lines and comments, match ^key= format
+                    if line and not line.startswith('#') and line.startswith(key + '='):
                         return line.split('=', 1)[1].strip()
             return None
 
@@ -116,7 +118,9 @@ class PropertyModifier:
             return None
         with open(file_path, 'r', errors='ignore') as f:
             for line in f:
-                if line.strip().startswith(key + "="):
+                line = line.strip()
+                # 跳过空行和注释行，只匹配 ^key= 格式
+                if line and not line.startswith('#') and line.startswith(key + '='):
                     return line.split('=', 1)[1].strip()
         return None
 
