@@ -434,43 +434,32 @@ class RomPackage:
         )
 
     def _detect_filesystem(self, img_path: Path) -> str:
-        """Detect filesystem type by reading magic bytes"""
+        """Detect filesystem type by reading magic bytes at standard offsets"""
         try:
             with open(img_path, 'rb') as f:
-                magic = f.read(128)
+                header = f.read(4096)
                 
-                # EROFS magic bytes: "EROFS" at offset 0
-                # EROFS (0x45 0x52 0x4F 0x46) or little endian variant
-                if len(magic) >= 4:
-                    # Check for EROFS magic (both big and little endian)
-                    if magic[0:4] == bytes([0x45, 0x52, 0x4F, 0x46]):  # "EROFS"
-                        return "erofs"
-                    if magic[0:4] == bytes([0xE0, 0x52, 0x4F, 0x46]):  # alternative EROFS magic
-                        return "erofs"
-                    # Also check at offset 0x400 (some EROFS images have super block there)
-                    if len(magic) >= 0x440:
-                        if magic[0x400:0x404] == bytes([0x45, 0x52, 0x4F, 0x46]):
-                            return "erofs"
-                        if magic[0x400:0x404] == bytes([0xE0, 0x52, 0x4F, 0x46]):
-                            return "erofs"
-                
-                # ext4 magic: 0x53 0xEF at offset 0x38C
-                if len(magic) >= 0x390:
-                    if magic[0x38C:0x38E] == bytes([0x53, 0xEF]):
-                        return "ext4"
-                
-                # Also check at start of file for ext4
-                if len(magic) >= 2 and magic[0:2] == bytes([0x53, 0xef]):
-                    return "ext4"
-                
-                # f2fs magic: 0xF2 0xF0 0x52 0x10
-                if len(magic) >= 4 and magic[0:4] == bytes([0xf2, 0xf0, 0x52, 0x10]):
-                    return "f2fs"
-                    
+            if len(header) < 2048:
+                self.logger.warning(f"File too small to detect filesystem: {img_path}")
+                return "unknown"
+
+            if header[0x400:0x404] == bytes([0xE2, 0xE1, 0xF5, 0xE0]):
+                return "erofs"
+
+            if header[0x438:0x43a] == bytes([0x53, 0xEF]):
+                return "ext4"
+
+            if header[0x400:0x404] == bytes([0x10, 0x20, 0xF5, 0xF2]):
+                return "f2fs"
+
+            if header[0:4] == bytes([0x3A, 0xFF, 0x26, 0xED]):
+                return "sparse_image"
+
+            return "unknown"
+
         except Exception as e:
             self.logger.warning(f"Failed to detect filesystem for {img_path}: {e}")
-        
-        return "unknown"
+            return "unknown"
     
     def parse_all_props(self):
         """
