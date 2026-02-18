@@ -8,7 +8,7 @@ from src.core.rom import RomPackage
 from src.core.context import Context
 from src.core.tools import ToolManager
 from src.core.props import PropertyModifier
-from src.core.patcher import SmaliPatcher
+from src.core.modifier import SystemModifier, FrameworkModifier
 from src.core.packer import Packer
 
 # Setup logging
@@ -66,10 +66,16 @@ def main():
 
     # Extract ROMs
     try:
+        # Base ROM needs all partitions
         baserom.extract(tools)
         # Port ROM only needs specific partitions: system, product, system_ext, and my_*
         portrom_partitions = ["system", "product", "system_ext", "my_*"]
         portrom.extract(tools, partitions=portrom_partitions)
+        
+        # Also extract baserom partitions needed for props reading
+        baserom_partitions = ["system", "product", "system_ext", "my_product", "my_manifest"]
+        for part in baserom_partitions:
+            baserom.extract_partition_to_file(part, tools)
     except Exception as e:
         logger.error(f"Failed to extract ROMs: {e}")
         sys.exit(1)
@@ -118,8 +124,10 @@ def main():
 
     # Stage 3: Smali Patching
     logger.info("Starting Stage 3: Smali Patching...")
-    patcher = SmaliPatcher(ctx)
-    patcher.run()
+    system_modifier = SystemModifier(ctx)
+    system_modifier.run()
+    framework_modifier = FrameworkModifier(ctx)
+    framework_modifier.run()
 
     # Stage 4: Repacking
     logger.info("Starting Stage 4: Repacking...")

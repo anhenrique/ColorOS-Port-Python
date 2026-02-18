@@ -14,8 +14,16 @@ class Context:
         self.config = config
         self.baserom = baserom
         self.portrom = portrom
+        
+        # Compatibility aliases for modifier.py
+        self.stock = baserom
+        self.port = portrom
+        self.baserom = baserom  # Alias for props.py
+        self.portrom = portrom  # Alias for props.py
+        
         self.work_dir = Path(work_dir).resolve()
         self.device_code = device_code
+        self.stock_rom_code = device_code
         self.logger = logger
         
         self.build_dir = self.work_dir
@@ -67,7 +75,7 @@ class Context:
             shutil.rmtree(dest_dir)
         
         # 2. Copy partition files to target directory
-        # shutil.copytree(src, dst)
+        # Copy content of src_dir, not src_dir itself
         shutil.copytree(src_dir, dest_dir, symlinks=True, dirs_exist_ok=True)
         
         # 3. Copy partition configuration files BACK into target dir for Packer

@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Android/ColorOS Porting specific
+out/
+devices/**/*.img
+devices/**/*.apk
+!devices/**/override/**
+*.log
+*.img
+*.bin
+tmp/
+
+# Editor specific
+.idea/
+.vscode/
+*.swp
+*.bak
+*.odex
+*.vdex
+
+# Output
+output/
+porting.log

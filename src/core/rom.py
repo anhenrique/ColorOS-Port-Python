@@ -241,15 +241,17 @@ class RomPackage:
         Extract partition to internal extracted directory (Level 2 Extraction).
         Returns the path to the extracted directory.
         """
-        # Define internal extraction path
-        target_dir = self.extracted_dir / part_name
+        # Define internal extraction path - use parent dir to avoid double nesting
+        # extract.erofs creates a subdirectory with partition name
+        target_dir = self.extracted_dir
         
         # Check if already extracted (check for marker or non-empty dir)
         config_exists = (self.work_dir / "config" / f"{part_name}_fs_config").exists()
-        if target_dir.exists() and any(target_dir.iterdir()) and config_exists:
+        extracted_part_dir = target_dir / part_name
+        if extracted_part_dir.exists() and any(extracted_part_dir.iterdir()) and config_exists:
              logger.info(f"[{self.label}] Partition {part_name} already extracted.")
-             return target_dir
-             
+             return extracted_part_dir
+              
         # Not extracted, so do it.
         img_path = self.images_dir / f"{part_name}.img"
         if not img_path.exists():
@@ -280,7 +282,7 @@ class RomPackage:
             img_path.unlink(missing_ok=True)
             logger.info(f"[{self.label}] Deleted {img_path.name} to save space")
             
-            return target_dir
+            return extracted_part_dir
             
         except Exception as e:
             logger.error(f"Failed to extract {part_name}: {e}")
