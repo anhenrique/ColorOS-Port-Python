@@ -9,6 +9,7 @@ from src.core.context import Context
 from src.core.tools import ToolManager
 from src.core.props import PropertyModifier
 from src.core.patcher import SmaliPatcher
+from src.core.packer import Packer
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -72,7 +73,6 @@ def main():
         sys.exit(1)
     
     # 2. Refined Device Code Detection (After Extraction)
-    # Check my_manifest/build.prop: ro.oplus.version.my_manifest
     if not device_code:
         manifest_prop = baserom.images_dir / "my_manifest/build.prop"
         if manifest_prop.exists():
@@ -80,7 +80,6 @@ def main():
                 with open(manifest_prop, 'r', errors='ignore') as f:
                     for line in f:
                         if "ro.oplus.version.my_manifest=" in line:
-                            # e.g. ro.oplus.version.my_manifest=PJE110_11.C.26_...
                             val = line.split('=')[1].strip()
                             device_code = val.split('_')[0]
                             logger.info(f"Detected device code from build.prop: {device_code}")
@@ -114,7 +113,12 @@ def main():
     patcher = SmaliPatcher(ctx)
     patcher.run()
 
-    logger.info("Porting process (Stage 1-3) complete.")
+    # Stage 4: Repacking
+    logger.info("Starting Stage 4: Repacking...")
+    packer = Packer(ctx)
+    packer.run()
+
+    logger.info("Porting process (Stage 1-4) complete.")
 
 if __name__ == "__main__":
     main()
