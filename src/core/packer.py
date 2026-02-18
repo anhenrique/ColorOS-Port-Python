@@ -642,12 +642,12 @@ class Repacker:
 
         self.logger.info("Collecting logical partition images...")
         for img in self.ctx.target_dir.glob("*.img"):
-            shutil.copy2(img, self.images_out)
+            shutil.move(str(img), str(self.images_out / img.name))
 
         self.logger.info("Collecting firmware images...")
         if self.ctx.repack_images_dir.exists():
             for img in self.ctx.repack_images_dir.glob("*.img"):
-                shutil.copy2(img, self.images_out)
+                shutil.move(str(img), str(self.images_out / img.name))
 
         device_custom_dir = Path(f"devices/{self.ctx.stock_rom_code}")
         if device_custom_dir.exists():
@@ -765,11 +765,11 @@ class Repacker:
         timestamp = now.strftime("%Y%m%d%H%M%S")
         output_zip = self.out_dir / f"{self.ctx.stock_rom_code}-ota_full-{timestamp}.zip"
         
-        key_path = self.ota_tools_dir / "security" / "testkey"
+        key_path = self.ota_tools_dir / "key" / "testkey"
         
         # Simple check if key exists
-        if not (self.ota_tools_dir / "security" / "testkey.pk8").exists():
-            self.logger.warning(f"Signature key not found at {key_path}.pk8! Please check your otatools/security folder.")
+        if not (self.ota_tools_dir / "key" / "testkey.pk8").exists():
+            self.logger.warning(f"Signature key not found at {key_path}.pk8! Please check your otatools/key folder.")
 
         custom_tmp_dir = self.out_dir / "tmp"
 
@@ -780,6 +780,7 @@ class Repacker:
         self.logger.info(f"Using custom TMPDIR: {custom_tmp_dir}")
         env = os.environ.copy()
         env["PATH"] = f"{self.ota_tools_dir}/bin:{env['PATH']}"
+        env["PYTHONPATH"] = f"{self.ota_tools_dir}/releasetools"
         
         env["TMPDIR"] = str(custom_tmp_dir)
 
