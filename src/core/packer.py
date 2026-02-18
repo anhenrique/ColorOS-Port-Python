@@ -68,8 +68,26 @@ class Packer:
         
         cmd_str = " ".join(cmd)
         logger.info(f"Packing {partition_name} with erofs...")
-        output = Shell.run(cmd_str)
-        logger.info(f"mkfs.erofs output for {partition_name}:\n{output}")
+        
+        # Suppress verbose output, only show errors
+        import subprocess
+        import shlex
+        try:
+            result = subprocess.run(
+                shlex.split(cmd_str),
+                capture_output=True,
+                text=True
+            )
+            if result.returncode != 0:
+                logger.error(f"mkfs.erofs failed for {partition_name}: {result.stderr}")
+                raise subprocess.CalledProcessError(result.returncode, cmd_str)
+            # Only log summary, not all the "Processing..." lines
+            if result.stderr:
+                logger.warning(f"mkfs.erofs warnings for {partition_name}: {result.stderr}")
+            logger.info(f"Successfully packed {partition_name}.img ({output_file.stat().st_size / (1024*1024):.2f} MB)")
+        except Exception as e:
+            logger.error(f"Failed to pack {partition_name}: {e}")
+            raise
 
     def _pack_ext4(self, mount_point: Path, output_file: Path, partition_name: str):
         tool = self.tools.get_tool("make_ext4fs")
