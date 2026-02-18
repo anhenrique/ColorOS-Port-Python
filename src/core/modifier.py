@@ -63,6 +63,9 @@ class SystemModifier:
         # Unlock features AFTER config migration, otherwise changes to XMLs are lost
         self._unlock_device_features()
         
+        # ColorOS specific: Apply XML features from config
+        self._apply_coloros_features()
+        
         self._fix_vndk_apex()
         self._fix_vintf_manifest()
         
@@ -336,6 +339,187 @@ class SystemModifier:
                     self._apply_build_props(eu_props)
                 except Exception as e:
                     self.logger.error(f"Failed to apply EU localization props: {e}")
+
+    def _apply_coloros_features(self):
+        """
+        Apply ColorOS specific XML features - port.sh add_feature_v2 logic
+        Handles oplus_feature, app_feature, permission_feature, permission_oplus_feature
+        """
+        self.logger.info("Applying ColorOS XML features...")
+        
+        # Load ColorOS features config
+        config = self._load_coloros_feature_config()
+        if not config:
+            self.logger.info("No ColorOS features config found, skipping.")
+            return
+        
+        # Apply each feature type
+        self._apply_coloros_xml_features(config.get("oplus_feature", []), "oplus_feature")
+        self._apply_coloros_xml_features(config.get("app_feature", []), "app_feature")
+        self._apply_coloros_xml_features(config.get("permission_feature", []), "permission_feature")
+        self._apply_coloros_xml_features(config.get("permission_oplus_feature", []), "permission_oplus_feature")
+        
+        # Apply props remove/add
+        props_remove = config.get("props_remove", [])
+        if props_remove:
+            self._remove_build_props(props_remove)
+        
+        props_add = config.get("props_add", {})
+        if props_add:
+            self._apply_build_props(props_add)
+
+    def _load_coloros_feature_config(self):
+        """Load ColorOS features from JSON config"""
+        config = {}
+        
+        # Load Common Config
+        common_cfg = Path("devices/common/features.json")
+        if common_cfg.exists():
+            try:
+                with open(common_cfg, 'r') as f:
+                    config = json.load(f)
+            except Exception as e:
+                self.logger.error(f"Failed to load ColorOS features: {e}")
+        
+        # Load Device Config (Override)
+        device_cfg = Path(f"devices/{self.ctx.stock_rom_code}/features.json")
+        if device_cfg.exists():
+            try:
+                with open(device_cfg, 'r') as f:
+                    device_config = json.load(f)
+                
+                # Deep merge
+                for key, value in device_config.items():
+                    if isinstance(value, dict) and key in config:
+                        config[key].update(value)
+                    elif isinstance(value, list) and key in config:
+                        config[key].extend(value)
+                    else:
+                        config[key] = value
+            except Exception as e:
+                self.logger.error(f"Failed to load device ColorOS features: {e}")
+        
+        return config
+
+    def _apply_coloros_xml_features(self, features: list, feature_type: str):
+        """Apply ColorOS XML features - port.sh add_feature_v2 logic"""
+        if not features:
+            return
+        
+        # Determine target directory and file based on feature type
+        target_dir = self.ctx.target_dir / "my_product" / "etc"
+        
+        if feature_type == "oplus_feature":
+            xml_dir = target_dir / "extension"
+            base_file = "com.oplus.oplus-feature"
+            root_tag = "oplus-config"
+            node_tag = "oplus-feature"
+        elif feature_type == "app_feature":
+            xml_dir = target_dir / "extension"
+            base_file = "com.oplus.app-features"
+            root_tag = "extend_features"
+            node_tag = "app_feature"
+        elif feature_type == "permission_feature":
+            xml_dir = target_dir / "permissions"
+            base_file = "com.oplus.android-features"
+            root_tag = "permissions"
+            node_tag = "feature"
+        elif feature_type == "permission_oplus_feature":
+            xml_dir = target_dir / "permissions"
+            base_file = "oplus.feature-android"
+            root_tag = "oplus-config"
+            node_tag = "oplus-feature"
+        else:
+            return
+        
+        xml_dir.mkdir(parents=True, exist_ok=True)
+        output_file = xml_dir / f"{base_file}-ext.xml"
+        
+        # Create file if not exists
+        if not output_file.exists():
+            content = f'<?xml version="1.0" encoding="UTF-8"?>\n<{root_tag}>\n</{root_tag}>\n'
+            output_file.write_text(content, encoding='utf-8')
+        
+        # Read existing content
+        content = output_file.read_text(encoding='utf-8')
+        
+        for entry in features:
+            # Parse entry: "feature^comment^args" or just "feature"
+            parts = entry.split('^')
+            feature = parts[0].strip()
+            comment = parts[1].strip() if len(parts) > 1 and parts[1] else ""
+            extra = parts[2].strip() if len(parts) > 2 else ""
+            
+            # Check if feature already exists in any XML
+            exists = self._check_feature_exists(feature)
+            if exists:
+                self.logger.info(f"Feature {feature} already exists, skipping.")
+                continue
+            
+            # Add feature
+            self.logger.info(f"Adding feature: {feature}")
+            
+            # Build attribute string
+            attrs = f'name="{feature}"'
+            if extra and feature_type == "app_feature":
+                attrs = f'{attrs} {extra}'
+            elif extra:
+                attrs = f'{attrs} {extra}'
+            
+            # Add comment before feature
+            if comment:
+                comment_line = f"    <!-- {comment} -->\n"
+                content = content.replace(f"</{root_tag}>", comment_line + f"    <{node_tag} {attrs}/>\n</{root_tag}>")
+            else:
+                content = content.replace(f"</{root_tag}>", f"    <{node_tag} {attrs}/>\n</{root_tag}>")
+        
+        output_file.write_text(content, encoding='utf-8')
+
+    def _check_feature_exists(self, feature: str) -> bool:
+        """Check if feature already exists in any XML file"""
+        my_product_etc = self.ctx.target_dir / "my_product" / "etc"
+        if not my_product_etc.exists():
+            return False
+        
+        for xml_file in my_product_etc.rglob("*.xml"):
+            try:
+                content = xml_file.read_text(encoding='utf-8', errors='ignore')
+                if feature in content:
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def _remove_build_props(self, props_to_remove: list):
+        """Remove properties from build.prop files"""
+        target_dirs = [
+            self.ctx.target_dir / "my_product",
+            self.ctx.target_dir / "my_manifest", 
+            self.ctx.target_dir / "system" / "system",
+            self.ctx.target_dir / "vendor"
+        ]
+        
+        for target_dir in target_dirs:
+            build_prop = target_dir / "build.prop"
+            if not build_prop.exists():
+                continue
+            
+            content = build_prop.read_text(encoding='utf-8', errors='ignore')
+            lines = content.split('\n')
+            new_lines = []
+            
+            for line in lines:
+                should_remove = False
+                for prop in props_to_remove:
+                    if line.strip().startswith(prop + "="):
+                        should_remove = True
+                        self.logger.info(f"Removing prop: {prop}")
+                        break
+                
+                if not should_remove:
+                    new_lines.append(line)
+            
+            build_prop.write_text('\n'.join(new_lines), encoding='utf-8')
 
     def _load_feature_config(self):
         config = {}

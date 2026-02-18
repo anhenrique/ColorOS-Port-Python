@@ -11,10 +11,7 @@
             "persist.sys.usb.config": "mtp,adb",
             "persist.sys.disable_rescue": "true"
         },
-        "my_product": {
-            "persist.oplus.prophook.com.oplus.ai.magicstudio": "MODEL:PLK110,BRAND:OnePlus",
-            "persist.oplus.prophook.com.oplus.aiunit": "MODEL:PLK110,BRAND:OnePlus"
-        },
+        "my_product": {},
         "my_manifest": {}
     },
     "props_remove": [
@@ -35,5 +32,13 @@
         "ro.oplus.game.camera.support_1_0": "true",
         "ro.oplus.audio.quiet_start": "true",
         "ro.sf.lcd_density": "480"
-    }
+    },
+    "oplus_feature": [
+        "oplus.software.radio.networkless_support^无网畅聊"
+    ],
+    "app_feature": [],
+    "permission_feature": [],
+    "permission_oplus_feature": [
+        "oplus.software.game.cold.start.speedup.enable"
+    ]
 }
