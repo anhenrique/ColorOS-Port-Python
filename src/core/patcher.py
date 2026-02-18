@@ -22,11 +22,9 @@ class SmaliPatcher:
         logger.info("Smali Patching Complete.")
 
     def _patch_services_jar(self):
-        # Locate services.jar
-        jar_path = self.target_dir / "system/system/framework/services.jar"
+        jar_path = self.target_dir / "system/framework/services.jar"
         if not jar_path.exists():
-            # Try other locations if structure varies
-            jar_path = self.target_dir / "system/framework/services.jar"
+            jar_path = self.target_dir / "system/system/framework/services.jar"
             
         if not jar_path.exists():
             logger.warning("services.jar not found, skipping.")
@@ -57,9 +55,9 @@ class SmaliPatcher:
         shutil.rmtree(temp_dir)
 
     def _patch_framework_jar(self):
-        jar_path = self.target_dir / "system/system/framework/framework.jar"
+        jar_path = self.target_dir / "system/framework/framework.jar"
         if not jar_path.exists():
-             jar_path = self.target_dir / "system/framework/framework.jar"
+             jar_path = self.target_dir / "system/system/framework/framework.jar"
 
         if not jar_path.exists():
             logger.warning("framework.jar not found, skipping.")
@@ -82,12 +80,11 @@ class SmaliPatcher:
         shutil.rmtree(temp_dir)
 
     def _patch_oplus_services_jar(self):
-        # Locate oplus-services.jar
         jar_path = None
         candidates = [
+            self.target_dir / "system/framework/oplus-services.jar",
             self.target_dir / "system/system/framework/oplus-services.jar",
-            self.target_dir / "system_ext/framework/oplus-services.jar",
-            self.target_dir / "system/framework/oplus-services.jar"
+            self.target_dir / "system_ext/framework/oplus-services.jar"
         ]
         
         for p in candidates:
