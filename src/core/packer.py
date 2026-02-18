@@ -734,11 +734,36 @@ class Repacker:
             "product": "PRODUCT",
             "system_ext": "SYSTEM_EXT",
             "vendor": "VENDOR",
-            "odm": "ODM"
         }
         
+        # Special handling for ODM: use my_manifest's build.prop which contains ro.product.odm.device
+        odm_prop = self.ctx.get_target_prop_file("my_manifest")
+        if odm_prop and odm_prop.exists():
+            shutil.copy2(odm_prop, self.product_out / "ODM" / "build.prop")
+            self.logger.info("Using my_manifest build.prop for ODM (contains ro.product.odm.device)")
+        else:
+            odm_prop = self.ctx.get_target_prop_file("odm")
+            if odm_prop and odm_prop.exists():
+                shutil.copy2(odm_prop, self.product_out / "ODM" / "build.prop")
+            else:
+                self.logger.warning("build.prop for ODM not found, OTA metadata might be incomplete.")
+        
+        # Handle PRODUCT - try product first, then my_product
+        product_prop = self.ctx.get_target_prop_file("product")
+        if product_prop and product_prop.exists():
+            shutil.copy2(product_prop, self.product_out / "PRODUCT" / "build.prop")
+        else:
+            my_product_prop = self.ctx.get_target_prop_file("my_product")
+            if my_product_prop and my_product_prop.exists():
+                shutil.copy2(my_product_prop, self.product_out / "PRODUCT" / "build.prop")
+                self.logger.info("Using my_product build.prop for PRODUCT")
+            else:
+                self.logger.warning("build.prop for PRODUCT not found, OTA metadata might be incomplete.")
+        
+        # Handle other partitions
         for part_lower, part_upper in mapping.items():
-            # First try to find in unpacked directory
+            if part_upper in ["SYSTEM", "PRODUCT", "ODM"]:
+                continue  # Already handled above
             src_prop = self.ctx.get_target_prop_file(part_lower)
             if src_prop and src_prop.exists():
                 shutil.copy2(src_prop, self.product_out / part_upper / "build.prop")
