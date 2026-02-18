@@ -24,11 +24,21 @@ class Context:
         self.work_dir = Path(work_dir).resolve()
         self.device_code = device_code
         self.stock_rom_code = device_code
+        
+        # Additional attributes needed by packer.py
+        self.target_rom_version = "1.0"  # Default version
+        self.base_android_version = "14"  # Default
+        self.port_android_version = "14"  # Default
+        self.security_patch = "2024-01-01"  # Default
+        self.is_ab_device = False  # Default, will be detected
+        
         self.logger = logger
         
         self.build_dir = self.work_dir
         self.target_dir = self.build_dir / "target"
         self.repack_dir = self.build_dir / "repack"
+        self.target_config_dir = self.target_dir / "config"
+        self.repack_images_dir = self.work_dir / "repack_images"
 
         # Initialize tools
         self.bin_root = Path("bin").resolve()
@@ -36,12 +46,25 @@ class Context:
         
         self._init_workspace()
 
+    def get_target_prop_file(self, partition_name: str):
+        """Get build.prop file path for a target partition"""
+        prop_path = self.target_dir / partition_name / "build.prop"
+        if prop_path.exists():
+            return prop_path
+        # Try nested path
+        prop_path_nested = self.target_dir / partition_name / partition_name / "build.prop"
+        if prop_path_nested.exists():
+            return prop_path_nested
+        return None
+
     def _init_workspace(self):
         # if self.build_dir.exists():
         #     shutil.rmtree(self.build_dir)
         self.build_dir.mkdir(parents=True, exist_ok=True)
         self.target_dir.mkdir(parents=True, exist_ok=True)
         self.repack_dir.mkdir(parents=True, exist_ok=True)
+        self.target_config_dir.mkdir(parents=True, exist_ok=True)
+        self.repack_images_dir.mkdir(parents=True, exist_ok=True)
 
     def install_partitions(self):
         # Use ThreadPoolExecutor for parallel partition installation

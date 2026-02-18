@@ -9,7 +9,7 @@ from src.core.context import Context
 from src.core.tools import ToolManager
 from src.core.props import PropertyModifier
 from src.core.modifier import SystemModifier, FrameworkModifier
-from src.core.packer import Packer
+from src.core.packer import Repacker
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -131,8 +131,8 @@ def main():
 
     # Stage 4: Repacking
     logger.info("Starting Stage 4: Repacking...")
-    packer = Packer(ctx)
-    packer.run()
+    packer = Repacker(ctx)
+    packer.pack_all(pack_type="EROFS", is_rw=False)
 
     logger.info("Porting process (Stage 1-4) complete.")
 
