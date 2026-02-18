@@ -42,5 +42,109 @@
         "match_mode": "glob",
         "ensure_exists": true,
         "files": ["*Biometric*"]
+    },
+    {
+        "description": "Product displayconfig (display_id*.xml)",
+        "type": "file",
+        "search_path": "product/etc/displayconfig",
+        "match_mode": "glob",
+        "ensure_exists": true,
+        "files": ["display_id*.xml"]
+    },
+    {
+        "description": "Product device_features directory",
+        "type": "dir",
+        "search_path": "product/etc/device_features",
+        "match_mode": "exact",
+        "ensure_exists": true,
+        "files": ["*"]
+    },
+    {
+        "description": "Product device_info.json",
+        "type": "file",
+        "search_path": "product/etc",
+        "match_mode": "exact",
+        "ensure_exists": false,
+        "files": ["device_info.json"]
+    },
+    {
+        "description": "my_product game manager config (bootloop fix)",
+        "type": "file",
+        "search_path": "my_product/etc/extension",
+        "match_mode": "exact",
+        "ensure_exists": true,
+        "files": ["sys_game_manager_config.json"]
+    },
+    {
+        "description": "my_product graphic enhancement config (bootloop fix)",
+        "type": "file",
+        "search_path": "my_product/etc/extension",
+        "match_mode": "exact",
+        "ensure_exists": true,
+        "files": ["sys_graphic_enhancement_config.json"]
+    },
+    {
+        "description": "my_product audio configs",
+        "type": "file",
+        "search_path": "my_product/etc",
+        "match_mode": "glob",
+        "ensure_exists": true,
+        "files": ["audio*.xml", "default_volume_tables.xml"]
+    },
+    {
+        "description": "my_product breenospeech2 directory",
+        "type": "dir",
+        "search_path": "my_product/etc/breenospeech2",
+        "match_mode": "exact",
+        "ensure_exists": true,
+        "files": ["*"]
+    },
+    {
+        "description": "my_product fusionlight_profile directory",
+        "type": "dir",
+        "search_path": "my_product/etc/fusionlight_profile",
+        "match_mode": "exact",
+        "ensure_exists": true,
+        "files": ["*"]
+    },
+    {
+        "description": "my_product permissions XML files",
+        "type": "file",
+        "search_path": "my_product/etc/permissions",
+        "match_mode": "glob",
+        "ensure_exists": true,
+        "files": ["*.xml"]
+    },
+    {
+        "description": "my_product extension XML files",
+        "type": "file",
+        "search_path": "my_product/etc/extension",
+        "match_mode": "glob",
+        "ensure_exists": true,
+        "files": ["*.xml"]
+    },
+    {
+        "description": "my_product refresh rate config",
+        "type": "file",
+        "search_path": "my_product/etc",
+        "match_mode": "exact",
+        "ensure_exists": false,
+        "files": ["refresh_rate_config.xml"]
+    },
+    {
+        "description": "my_product resolution switch config",
+        "type": "file",
+        "search_path": "my_product/etc",
+        "match_mode": "exact",
+        "ensure_exists": false,
+        "files": ["sys_resolution_switch_config.xml"]
+    },
+    {
+        "description": "my_product sensor config",
+        "type": "file",
+        "search_path": "my_product/etc/permissions",
+        "match_mode": "exact",
+        "ensure_exists": false,
+        "files": ["com.oplus.sensor_config.xml"]
     }
 ]
