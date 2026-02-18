@@ -205,6 +205,17 @@ class PropertyModifier:
         self.port_area = find_prop_in_dir(portrom.images_dir, "ro.oplus.image.system_ext.area", ["odm"])
         self.port_brand = find_prop_in_dir(portrom.images_dir, "ro.oplus.image.system_ext.brand", ["odm"])
         
+        # ROM type detection
+        self.portIsRealmeUI = (self.port_brand == "realme")
+        self.portIsColorOSGlobal = (self.port_area == "gdpr" and self.port_brand != "oneplus")
+        self.portIsOOS = (self.port_area == "gdpr" and self.port_brand == "oneplus")
+        self.portIsColorOS = not (self.portIsColorOSGlobal or self.portIsOOS or self.portIsRealmeUI)
+        
+        # LCD Density from base
+        self.base_rom_density = find_prop_in_dir(baserom.images_dir, "ro.sf.lcd_density", ["odm"])
+        if not self.base_rom_density:
+            self.base_rom_density = "480"
+        
         # AB device check
         is_ab = read_prop_from_file(port_vendor / "build.prop", "ro.build.ab_update")
         self.ctx.is_ab_device = (is_ab == "true")
@@ -227,58 +238,140 @@ class PropertyModifier:
         logger.info(f"AB Device: {self.ctx.is_ab_device}")
         
     def _modify_build_props(self):
-        target_manifest_prop = self.target_dir / "my_manifest" / "build.prop"
-        
-        if not target_manifest_prop.exists():
-            logger.warning(f"{target_manifest_prop} not found, skipping specific modifications.")
-            return
-
-        # 1. Update ro.build.display.id
-        def replace_display_id(match: Match[str]) -> str:
-            original = match.group(0)
-            if self.port_device_code and self.base_device_code:
-                return original.replace(self.port_device_code, self.base_device_code)
-            return original
-
-        self._sed_file(target_manifest_prop, 
-                       f"ro.build.display.id=.*", 
-                       replace_display_id)
-
-        # 2. Update ro.product.first_api_level
-        base_manifest_prop = self.ctx.baserom.extracted_dir / "my_manifest" / "build.prop"
-        base_first_api = self._read_prop_value(base_manifest_prop, "ro.product.first_api_level")
-        
-        if base_first_api:
-             self._sed_file(target_manifest_prop, 
-                            "ro.product.first_api_level=.*", 
-                            f"ro.product.first_api_level={base_first_api}")
-
-        # 3. Update Market Name and Enname
-        base_market_name = self._read_prop_value(base_manifest_prop, "ro.vendor.oplus.market.name")
-        base_market_enname = self._read_prop_value(base_manifest_prop, "ro.vendor.oplus.market.enname")
-        
-        if base_market_name:
-             self._sed_file(target_manifest_prop, "ro.vendor.oplus.market.name=.*", f"ro.vendor.oplus.market.name={base_market_name}")
-        
-        if base_market_enname:
-             self._sed_file(target_manifest_prop, "ro.vendor.oplus.market.enname=.*", f"ro.vendor.oplus.market.enname={base_market_enname}")
-
-        # 4. Remove unwanted properties
-        self._sed_file(target_manifest_prop, "ro.build.version.release=.*", "") 
-        self._sed_file(target_manifest_prop, "ro.oplus.watermark.betaversiononly.enable=.*", "")
-
-        # 5. Fix for Android 14 Base (if applicable)
-        if self.base_android_version and self.base_android_version <= "14":
-             keys = ["ro.product.name", "ro.product.model", "ro.product.manufacturer", "ro.product.device", "ro.product.brand", "ro.oplus.image.my_product.type"]
-             for key in keys:
-                 val = self._read_prop_value(base_manifest_prop, key)
-                 if val:
-                     if key == "ro.product.vendor.brand":
-                         val = "OPPO" # Special case
-                     
-                     self._sed_file(target_manifest_prop, f"^{key}=.*", f"{key}={val}")
-
+        """Main build.prop modification - port.sh lines 1340-1600"""
+        self._modify_all_build_props()
+        self._modify_my_product_props()
+        self._modify_system_ext_props()
         logger.info("Build.prop modifications complete.")
+
+    def _modify_all_build_props(self):
+        """Modify all build.prop files - port.sh lines 1345-1376"""
+        portrom = self.ctx.portrom
+        
+        # Find all build.prop files in portrom images
+        for build_prop in portrom.images_dir.rglob("build.prop"):
+            if "system_dlkm" in str(build_prop) or "odm_dlkm" in str(build_prop):
+                continue
+            
+            content = build_prop.read_text(encoding='utf-8', errors='ignore')
+            modified = False
+            
+            # Timezone
+            if "persist.sys.timezone=" in content:
+                content = re.sub(r'persist\.sys\.timezone=.*', 'persist.sys.timezone=Asia/Shanghai', content)
+                modified = True
+            
+            # Global replacements (port -> base)
+            replacements = [
+                (self.port_device_code, self.base_device_code),
+                (self.port_product_model, self.base_product_model),
+                (self.port_product_name, self.base_product_name),
+                (self.port_my_product_type, self.base_my_product_type),
+                (self.port_product_device, self.base_product_device),
+            ]
+            
+            for old_val, new_val in replacements:
+                if old_val and new_val and old_val != new_val:
+                    if old_val in content:
+                        content = content.replace(old_val, new_val)
+                        modified = True
+            
+            # Display ID
+            if self.target_display_id:
+                content = re.sub(r'ro\.build\.display\.id=.*', f'ro.build.display.id={self.target_display_id}', content)
+                modified = True
+            
+            # Region lock
+            content = re.sub(r'ro\.oplus\.radio\.global_regionlock\.enabled=.*', 'ro.oplus.radio.global_regionlock.enabled=false', content)
+            content = re.sub(r'persist\.sys\.radio\.global_regionlock\.allcheck=.*', 'persist.sys.radio.global_regionlock.allcheck=false', content)
+            content = re.sub(r'ro\.oplus\.radio\.checkservice=.*', 'ro.oplus.radio.checkservice=false', content)
+            modified = True
+            
+            if modified:
+                build_prop.write_text(content, encoding='utf-8')
+
+    def _modify_my_product_props(self):
+        """Modify my_product build.prop - port.sh lines 1378-1522"""
+        target_my_product = self.target_dir / "my_product"
+        if not target_my_product.exists():
+            return
+        
+        bruce_prop = target_my_product / "etc" / "bruce" / "build.prop"
+        my_product_prop = target_my_product / "build.prop"
+        
+        # Market name/enname
+        if self.base_market_name:
+            self._add_or_replace_prop(bruce_prop, "ro.vendor.oplus.market.name", self.base_market_name)
+        if self.base_market_enname:
+            self._add_or_replace_prop(bruce_prop, "ro.vendor.oplus.market.enname", self.base_market_enname)
+        
+        # Ported by watermark
+        oplusrom_prop = my_product_prop if my_product_prop.exists() else bruce_prop
+        if self._read_prop_value(oplusrom_prop, "ro.build.version.oplusrom.display"):
+            self._add_or_replace_prop(oplusrom_prop, "ro.build.version.oplusrom.display", 
+                                      self._read_prop_value(oplusrom_prop, "ro.build.version.oplusrom.display") + " | Ported By BT")
+        
+        # RealmeUI version
+        if getattr(self, 'portIsRealmeUI', False):
+            rui_version_map = {"16": "7.0", "15": "6.0", "14": "5.0"}
+            rui_version = rui_version_map.get(self.port_android_version, "5.0")
+            self._add_prop(bruce_prop, f"ro.build.version.realmeui={rui_version}")
+        
+        # Magic model props
+        self._add_prop(bruce_prop, f"persist.oplus.prophook.com.oplus.ai.magicstudio=MODEL:{self.base_device_code},BRAND:{self.base_product_model}")
+        self._add_prop(bruce_prop, f"persist.oplus.prophook.com.oplus.aiunit=MODEL:{self.base_device_code},BRAND:{self.base_product_model}")
+        
+        # LCD Density from base
+        if self.base_rom_density:
+            self._add_or_replace_prop(my_product_prop, "ro.sf.lcd_density", self.base_rom_density)
+
+    def _modify_system_ext_props(self):
+        """Modify system_ext build.prop"""
+        target_system_ext = self.target_dir / "system_ext"
+        if not target_system_ext.exists():
+            return
+        
+        system_ext_prop = target_system_ext / "etc" / "build.prop"
+        if not system_ext_prop.exists():
+            return
+        
+        # Brand replacement
+        if (getattr(self, 'portIsColorOSGlobal', False) == False and 
+            self.port_android_version and int(self.port_android_version) < 16):
+            if self.base_vendor_brand and self.port_vendor_brand:
+                base_brand_lower = self.base_vendor_brand.lower()
+                port_brand_lower = self.port_vendor_brand.lower()
+                if base_brand_lower != port_brand_lower:
+                    content = system_ext_prop.read_text(encoding='utf-8', errors='ignore')
+                    content = re.sub(r'ro\.oplus\.image\.system_ext\.brand=.*', 
+                                    f'ro.oplus.image.system_ext.brand={base_brand_lower}', content)
+                    system_ext_prop.write_text(content, encoding='utf-8')
+
+    def _add_or_replace_prop(self, prop_file: Path, key: str, value: str):
+        """Add or replace a property in build.prop"""
+        if not prop_file.exists():
+            prop_file.parent.mkdir(parents=True, exist_ok=True)
+            prop_file.write_text("", encoding='utf-8')
+        
+        content = prop_file.read_text(encoding='utf-8', errors='ignore')
+        
+        # Check if exists
+        if re.search(rf'^{re.escape(key)}=', content, re.MULTILINE):
+            content = re.sub(rf'^{re.escape(key)}=.*', f'{key}={value}', content, flags=re.MULTILINE)
+        else:
+            content += f"\n{key}={value}\n"
+        
+        prop_file.write_text(content, encoding='utf-8')
+
+    def _add_prop(self, prop_file: Path, prop_line: str):
+        """Add a property line to build.prop"""
+        if not prop_file.exists():
+            prop_file.parent.mkdir(parents=True, exist_ok=True)
+            prop_file.write_text("", encoding='utf-8')
+        
+        content = prop_file.read_text(encoding='utf-8', errors='ignore')
+        content += f"\n{prop_line}\n"
+        prop_file.write_text(content, encoding='utf-8')
 
     def _read_prop_value(self, file_path, key):
         if not file_path.exists():

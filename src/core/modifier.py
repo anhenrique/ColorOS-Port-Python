@@ -60,6 +60,8 @@ class SystemModifier:
         # Order matters!
         self._process_replacements()
         self._migrate_configs()
+        # Migrate my_product configs from baserom
+        self._migrate_my_product_configs()
         # Unlock features AFTER config migration, otherwise changes to XMLs are lost
         self._unlock_device_features()
         
@@ -520,6 +522,106 @@ class SystemModifier:
                     new_lines.append(line)
             
             build_prop.write_text('\n'.join(new_lines), encoding='utf-8')
+
+    def _migrate_my_product_configs(self):
+        """Migrate my_product configs from baserom - port.sh lines 1404-1548"""
+        self.logger.info("Migrating my_product configs...")
+        
+        baserom = self.ctx.stock.extracted_dir
+        target = self.ctx.target_dir
+        
+        baserom_my_product = baserom / "my_product"
+        target_my_product = target / "my_product"
+        
+        if not baserom_my_product.exists() or not target_my_product.exists():
+            self.logger.warning("my_product directories not found, skipping migration.")
+            return
+        
+        # Fix bootloop - game manager config
+        game_manager_src = baserom_my_product / "etc" / "extension" / "sys_game_manager_config.json"
+        game_manager_dst = target_my_product / "etc" / "extension" / "sys_game_manager_config.json"
+        if game_manager_src.exists():
+            shutil.copy2(game_manager_src, game_manager_dst)
+            self.logger.info("Copied sys_game_manager_config.json")
+        else:
+            game_manager_dst.unlink(missing_ok=True)
+        
+        # Fix bootloop - graphic enhancement config
+        graphic_src = baserom_my_product / "etc" / "extension" / "sys_graphic_enhancement_config.json"
+        graphic_dst = target_my_product / "etc" / "extension" / "sys_graphic_enhancement_config.json"
+        if graphic_src.exists():
+            shutil.copy2(graphic_src, graphic_dst)
+            self.logger.info("Copied sys_graphic_enhancement_config.json")
+        else:
+            graphic_dst.unlink(missing_ok=True)
+        
+        # Fix wechat/whatsapp volume issue
+        for xml_file in baserom_my_product / "etc" / "audio*.xml":
+            if xml_file.exists():
+                shutil.copy2(xml_file, target_my_product / "etc" / xml_file.name)
+        
+        volume_table = baserom_my_product / "etc" / "default_volume_tables.xml"
+        if volume_table.exists():
+            shutil.copy2(volume_table, target_my_product / "etc" / "default_volume_tables.xml")
+        
+        # breenospeech2
+        breeno_src = baserom_my_product / "etc" / "breenospeech2"
+        breeno_dst = target_my_product / "etc" / "breenospeech2"
+        if breeno_src.exists():
+            for f in breeno_src.rglob("*"):
+                if f.is_file():
+                    dest_file = breeno_dst / f.name
+                    shutil.copy2(f, dest_file)
+        
+        # fusionlight_profile
+        fusionlight_src = baserom_my_product / "etc" / "fusionlight_profile"
+        fusionlight_dst = target_my_product / "etc" / "fusionlight_profile"
+        if fusionlight_dst.exists():
+            shutil.rmtree(fusionlight_dst)
+        if fusionlight_src.exists():
+            shutil.copytree(fusionlight_src, fusionlight_dst)
+        
+        # Permissions XML files
+        perms_src = baserom_my_product / "etc" / "permissions"
+        perms_dst = target_my_product / "etc" / "permissions"
+        if perms_src.exists():
+            for f in perms_src.glob("*.xml"):
+                shutil.copy2(f, perms_dst / f.name)
+        
+        # Extension XML files
+        ext_src = baserom_my_product / "etc" / "extension"
+        ext_dst = target_my_product / "etc" / "extension"
+        if ext_src.exists():
+            for f in ext_src.glob("*.xml"):
+                shutil.copy2(f, ext_dst / f.name)
+        
+        # Refresh rate config
+        refresh_rate_src = baserom_my_product / "etc" / "refresh_rate_config.xml"
+        refresh_rate_dst = target_my_product / "etc" / "refresh_rate_config.xml"
+        if refresh_rate_src.exists():
+            shutil.copy2(refresh_rate_src, refresh_rate_dst)
+        
+        # Resolution switch config
+        res_switch_src = baserom_my_product / "etc" / "sys_resolution_switch_config.xml"
+        res_switch_dst = target_my_product / "etc" / "sys_resolution_switch_config.xml"
+        if res_switch_src.exists():
+            shutil.copy2(res_switch_src, res_switch_dst)
+        
+        # Sensor config
+        sensor_src = baserom_my_product / "etc" / "permissions" / "com.oplus.sensor_config.xml"
+        sensor_dst = target_my_product / "etc" / "permissions" / "com.oplus.sensor_config.xml"
+        if sensor_src.exists():
+            shutil.copy2(sensor_src, sensor_dst)
+        
+        # vulkanLayer and gpudrivers
+        vulkan_src = baserom_my_product / "app" / "com.oplus.vulkanLayer"
+        vulkan_dst = target_my_product / "app" / "com.oplus.vulkanLayer"
+        if vulkan_src.exists():
+            shutil.copytree(vulkan_src, vulkan_dst, dirs_exist_ok=True)
+        
+        for gpudriver in baserom_my_product / "app" / "com.oplus.gpudrivers.*":
+            if gpudriver.exists():
+                shutil.copy2(gpudriver, target_my_product / "app" / gpudriver.name)
 
     def _load_feature_config(self):
         config = {}
