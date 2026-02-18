@@ -102,14 +102,14 @@ def main():
     # Pass device_code to Context
     ctx = Context(config, baserom, portrom, work_dir, device_code) 
     
-    # Export build.prop for debugging
-    logger.info("Exporting build.prop for debugging...")
-    baserom.export_props(work_dir / "build_props" / "baserom_build.prop")
-    portrom.export_props(work_dir / "build_props" / "portrom_build.prop")
-
     # Stage 1: Install Partitions
     logger.info("Starting Stage 1: Partition Installation...")
     ctx.install_partitions()
+    
+    # Export build.prop for debugging (after partitions are extracted)
+    logger.info("Exporting build.prop for debugging...")
+    baserom.export_props(work_dir / "build_props" / "baserom_build.prop")
+    portrom.export_props(work_dir / "build_props" / "portrom_build.prop")
     
     # Stage 2: Property Modification
     logger.info("Starting Stage 2: Property Modification...")
