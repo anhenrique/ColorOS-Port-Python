@@ -67,9 +67,11 @@ class RomPackage:
         logger.info("Detected payload.bin in zip. Extracting...")
         # Extract payload.bin first
         temp_payload = self.work_dir / "payload.bin"
+        
         with zipfile.ZipFile(self.path, 'r') as z:
-            with open(temp_payload, 'wb') as f:
-                f.write(z.read("payload.bin"))
+            # Optimize: Stream extraction instead of read() into memory
+            with z.open("payload.bin") as source, open(temp_payload, "wb") as target:
+                shutil.copyfileobj(source, target)
         
         self._extract_payload_bin_file(temp_payload, tools)
         temp_payload.unlink()
