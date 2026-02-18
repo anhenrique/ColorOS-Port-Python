@@ -68,8 +68,8 @@ def main():
     try:
         # Base ROM needs all partitions
         baserom.extract_images()
-        # Port ROM only needs specific partitions: system, product, system_ext, and my_*
-        portrom_partitions = ["system", "product", "system_ext", "my_product", "my_manifest"]
+        # Port ROM only needs specific partitions from config
+        portrom_partitions = config.partition_to_port
         portrom.extract_images(portrom_partitions)
         
         # Also extract baserom partitions needed for props reading
