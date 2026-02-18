@@ -101,13 +101,13 @@ class Context:
         # Copy content of src_dir, not src_dir itself
         shutil.copytree(src_dir, dest_dir, symlinks=True, dirs_exist_ok=True)
         
-        # 3. Copy partition configuration files BACK into target dir for Packer
+        # 3. Copy partition configuration files to target_config_dir for Packer
         # (Since extract_partition_to_file moved them out to source_rom/config)
         src_fs, src_fc = source_rom.get_config_files(partition)
         
         if src_fs.exists():
-             shutil.copy2(src_fs, dest_dir / f"{partition}_fs_config")
+             shutil.copy2(src_fs, self.target_config_dir / f"{partition}_fs_config")
              
         if src_fc.exists():
-             shutil.copy2(src_fc, dest_dir / f"{partition}_file_contexts")
+             shutil.copy2(src_fc, self.target_config_dir / f"{partition}_file_contexts")
 
