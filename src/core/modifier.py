@@ -46,6 +46,9 @@ class SystemModifier:
         self.apktool = self.bin_dir / "apktool.jar"
         
         self.temp_dir = self.ctx.target_dir.parent / "temp"
+        
+        self._file_cache = {}  # Cache for file path lookups
+        self._dir_cache = {}   # Cache for directory path lookups
 
     def run(self):
         self.logger.info("Starting System Modification...")
@@ -924,17 +927,38 @@ class SystemModifier:
                 prop_file.write_text("\n".join(new_lines) + "\n", encoding='utf-8')
 
     def _find_file_recursive(self, root_dir: Path, filename: str) -> Path | None:
-        if not root_dir.exists(): return None
+        cache_key = (str(root_dir), filename)
+        if cache_key in self._file_cache:
+            cached_path = self._file_cache[cache_key]
+            if cached_path and cached_path.exists():
+                return cached_path
+            del self._file_cache[cache_key]
+        
+        if not root_dir.exists():
+            return None
         try:
-            return next(root_dir.rglob(filename))
+            result = next(root_dir.rglob(filename))
+            self._file_cache[cache_key] = result
+            return result
         except StopIteration:
+            self._file_cache[cache_key] = None
             return None
 
     def _find_dir_recursive(self, root_dir: Path, dirname: str) -> Path | None:
-        if not root_dir.exists(): return None
+        cache_key = (str(root_dir), dirname)
+        if cache_key in self._dir_cache:
+            cached_path = self._dir_cache[cache_key]
+            if cached_path and cached_path.exists():
+                return cached_path
+            del self._dir_cache[cache_key]
+        
+        if not root_dir.exists():
+            return None
         for p in root_dir.rglob(dirname):
             if p.is_dir() and p.name == dirname:
+                self._dir_cache[cache_key] = p
                 return p
+        self._dir_cache[cache_key] = None
         return None
 
     def _migrate_configs(self):
@@ -1096,6 +1120,9 @@ class FrameworkModifier:
         self.PRELOADS_SHAREDUIDS = ".locals 1\n    invoke-static {}, Lcom/android/internal/util/HookHelper;->RETURN_TRUE()Z\n    move-result v0\n    sput-boolean v0, Lcom/android/server/pm/ReconcilePackageUtils;->ALLOW_NON_PRELOADS_SYSTEM_SHAREDUIDS:Z\n    return-void"
 
         self.temp_dir = self.ctx.target_dir.parent / "temp_modifier"
+        
+        self._file_cache = {}
+        self._dir_cache = {}
 
     def run(self):
         self.logger.info("Starting System Modification...")
@@ -1216,17 +1243,38 @@ class FrameworkModifier:
         self._apkeditor_build(work_dir, jar_path)
 
     def _find_file_recursive(self, root_dir: Path, filename: str) -> Path | None:
-        if not root_dir.exists(): return None
+        cache_key = (str(root_dir), filename)
+        if cache_key in self._file_cache:
+            cached_path = self._file_cache[cache_key]
+            if cached_path and cached_path.exists():
+                return cached_path
+            del self._file_cache[cache_key]
+        
+        if not root_dir.exists():
+            return None
         try:
-            return next(root_dir.rglob(filename))
+            result = next(root_dir.rglob(filename))
+            self._file_cache[cache_key] = result
+            return result
         except StopIteration:
+            self._file_cache[cache_key] = None
             return None
 
     def _find_dir_recursive(self, root_dir: Path, dirname: str) -> Path | None:
-        if not root_dir.exists(): return None
+        cache_key = (str(root_dir), dirname)
+        if cache_key in self._dir_cache:
+            cached_path = self._dir_cache[cache_key]
+            if cached_path and cached_path.exists():
+                return cached_path
+            del self._dir_cache[cache_key]
+        
+        if not root_dir.exists():
+            return None
         for p in root_dir.rglob(dirname):
             if p.is_dir() and p.name == dirname:
+                self._dir_cache[cache_key] = p
                 return p
+        self._dir_cache[cache_key] = None
         return None
 
     def _mod_framework(self):
