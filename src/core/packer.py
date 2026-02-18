@@ -671,6 +671,9 @@ class Repacker:
             if init_boot.exists():
                 shutil.copy2(init_boot, self.images_out / "init_boot.img")
 
+        # Handle my_preload.img and my_company.img for third-party packs
+        self._handle_special_partitions()
+
         # Generate META info
         self._generate_meta_info()
 
@@ -679,6 +682,37 @@ class Repacker:
 
         # Call ota_from_target_files
         self._run_ota_tool()
+
+    def _handle_special_partitions(self):
+        """
+        Handle my_preload.img and my_company.img for third-party packs.
+        Third-party super partitions must contain these two partitions to boot properly.
+        Official OTA packs are modified and usually don't contain these images.
+        """
+        is_ab = getattr(self.ctx, 'is_ab_device', False)
+        
+        preload_empty = Path("devices/common/my_preload_empty.img")
+        company_empty = Path("devices/common/my_company_empty.img")
+        
+        preload_img = self.images_out / "my_preload.img"
+        company_img = self.images_out / "my_company.img"
+        
+        if is_ab:
+            if not preload_img.exists() and preload_empty.exists():
+                shutil.copy2(preload_empty, preload_img)
+                self.logger.info("Added missing my_preload.img from devices/common")
+            
+            if not company_img.exists() and company_empty.exists():
+                shutil.copy2(company_empty, company_img)
+                self.logger.info("Added missing my_company.img from devices/common")
+        else:
+            if company_img.exists():
+                company_img.unlink()
+                self.logger.info("Removed my_company.img for non-AB device")
+            
+            if preload_img.exists():
+                preload_img.unlink()
+                self.logger.info("Removed my_preload.img for non-AB device")
 
     def _generate_meta_info(self):
         """Generate ab_partitions.txt, dynamic_partitions_info.txt, misc_info.txt"""
