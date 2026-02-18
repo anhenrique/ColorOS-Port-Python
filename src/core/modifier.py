@@ -503,14 +503,46 @@ class SystemModifier:
                 pass
         return False
 
-    def _remove_build_props(self, props_to_remove: list):
-        """Remove properties from build.prop files"""
+    def _remove_build_props(self, props_to_remove: list, force: bool = False):
+        """Remove properties from build.prop files
+        Only removes if prop doesn't exist in baserom (or is commented out), unless force=True
+        """
         target_dirs = [
             self.ctx.target_dir / "my_product",
             self.ctx.target_dir / "my_manifest", 
             self.ctx.target_dir / "system" / "system",
             self.ctx.target_dir / "vendor"
         ]
+        
+        # First check which props exist in baserom (uncommented)
+        baserom_props = set()
+        baserom_props_commented = set()
+        
+        baserom_dirs = [
+            self.ctx.stock.extracted_dir / "my_product",
+            self.ctx.stock.extracted_dir / "my_manifest",
+            self.ctx.stock.extracted_dir / "system" / "system",
+            self.ctx.stock.extracted_dir / "vendor"
+        ]
+        
+        if not force:
+            for baserom_dir in baserom_dirs:
+                build_prop = baserom_dir / "build.prop"
+                if not build_prop.exists():
+                    continue
+                try:
+                    content = build_prop.read_text(encoding='utf-8', errors='ignore')
+                    for prop in props_to_remove:
+                        if f"{prop}=" in content:
+                            # Check if commented
+                            for line in content.split('\n'):
+                                stripped = line.strip()
+                                if stripped.startswith(f"{prop}="):
+                                    baserom_props.add(prop)
+                                elif stripped.startswith(f"#") and prop in stripped:
+                                    baserom_props_commented.add(prop)
+                except Exception:
+                    pass
         
         for target_dir in target_dirs:
             build_prop = target_dir / "build.prop"
@@ -525,8 +557,22 @@ class SystemModifier:
                 should_remove = False
                 for prop in props_to_remove:
                     if line.strip().startswith(prop + "="):
-                        should_remove = True
-                        self.logger.info(f"Removing prop: {prop}")
+                        # Check if should remove based on baserom
+                        if force:
+                            should_remove = True
+                        elif prop in baserom_props:
+                            # Exists in baserom, skip
+                            self.logger.info(f"Prop {prop} exists in baserom, skipping removal")
+                            should_remove = False
+                        elif prop in baserom_props_commented:
+                            # Commented in baserom, can remove
+                            should_remove = True
+                        else:
+                            # Doesn't exist in baserom
+                            should_remove = True
+                        
+                        if should_remove:
+                            self.logger.info(f"Removing prop: {prop}")
                         break
                 
                 if not should_remove:
@@ -605,26 +651,65 @@ class SystemModifier:
                     content = content.replace("</app>", f'  <enable pkg="{pkg}" priority="7"/>\n</app>')
             app_v2.write_text(content, encoding='utf-8')
 
-    def _remove_features_from_xml(self, features: list):
-        """Remove features from XML - port.sh remove_feature function"""
+    def _remove_features_from_xml(self, features: list, force: bool = False):
+        """Remove features from XML - port.sh remove_feature function
+        Only removes if feature doesn't exist in baserom (or is commented out), unless force=True
+        """
         my_product_etc = self.ctx.target_dir / "my_product" / "etc"
+        baserom_etc = self.ctx.stock.extracted_dir / "my_product" / "etc"
+        
         if not my_product_etc.exists():
             return
         
-        for xml_file in my_product_etc.rglob("*.xml"):
-            try:
-                content = xml_file.read_text(encoding='utf-8', errors='ignore')
-                original_content = content
-                for feature in features:
-                    content = content.replace(feature, "")
-                    # Also remove empty lines
-                    content = re.sub(r'^\s*$', '', content, flags=re.MULTILINE)
+        for feature in features:
+            should_remove = False
+            
+            if force:
+                # Force mode: always remove
+                should_remove = True
+            elif baserom_etc.exists():
+                # Check if feature exists in baserom
+                baserom_has_feature = False
+                baserom_feature_commented = False
                 
-                if content != original_content:
-                    xml_file.write_text(content, encoding='utf-8')
-                    self.logger.info(f"Removed features from {xml_file.name}")
-            except Exception:
-                pass
+                for xml_file in baserom_etc.rglob("*.xml"):
+                    try:
+                        content = xml_file.read_text(encoding='utf-8', errors='ignore')
+                        # Check if feature exists and is not commented
+                        if feature in content:
+                            if f"<!--{feature}" in content or f"<!-- {feature}" in content:
+                                baserom_feature_commented = True
+                            else:
+                                baserom_has_feature = True
+                                break
+                    except Exception:
+                        pass
+                
+                if baserom_has_feature:
+                    self.logger.info(f"Feature {feature} exists in baserom, skipping removal")
+                    continue
+                elif baserom_feature_commented:
+                    self.logger.info(f"Feature {feature} is commented in baserom, will remove from portrom")
+                    should_remove = True
+                else:
+                    # Feature doesn't exist in baserom, safe to remove
+                    should_remove = True
+            else:
+                # Baserom dir doesn't exist, safe to remove
+                should_remove = True
+            
+            if should_remove:
+                for xml_file in my_product_etc.rglob("*.xml"):
+                    try:
+                        content = xml_file.read_text(encoding='utf-8', errors='ignore')
+                        if feature in content:
+                            content = content.replace(feature, "")
+                            # Also remove empty lines
+                            content = re.sub(r'^\s*$', '', content, flags=re.MULTILINE)
+                            xml_file.write_text(content, encoding='utf-8')
+                            self.logger.info(f"Removed feature {feature} from {xml_file.name}")
+                    except Exception:
+                        pass
 
     def _migrate_my_product_configs(self):
         """Migrate my_product configs from baserom - port.sh lines 1404-1548"""
