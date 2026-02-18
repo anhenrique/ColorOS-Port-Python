@@ -810,7 +810,7 @@ class SystemModifier:
         if vulkan_src.exists():
             shutil.copytree(vulkan_src, vulkan_dst, dirs_exist_ok=True)
         
-        for gpudriver in baserom_my_product / "app" / "com.oplus.gpudrivers.*":
+        for gpudriver in (baserom_my_product / "app").glob("com.oplus.gpudrivers.*"):
             if gpudriver.exists():
                 shutil.copy2(gpudriver, target_my_product / "app" / gpudriver.name)
 

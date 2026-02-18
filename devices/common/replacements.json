@@ -1,0 +1,46 @@
+[
+    {
+        "description": "GPU Drivers from Stock ROM",
+        "type": "dir",
+        "search_path": "product/app",
+        "match_mode": "glob",
+        "ensure_exists": true,
+        "files": ["com.oplus.gpudrivers.*"]
+    },
+    {
+        "description": "Vulkan Layer from Stock ROM",
+        "type": "dir",
+        "search_path": "product/app",
+        "match_mode": "exact",
+        "ensure_exists": true,
+        "files": ["com.oplus.vulkanLayer"]
+    },
+    {
+        "description": "System Overlays",
+        "type": "file",
+        "search_path": "product",
+        "match_mode": "recursive",
+        "ensure_exists": false,
+        "files": [
+            "AospFrameworkResOverlay.apk",
+            "MiuiFrameworkResOverlay.apk",
+            "MiuiCarrierConfigOverlay.apk"
+        ]
+    },
+    {
+        "description": "Audio Effects",
+        "type": "dir",
+        "search_path": "product",
+        "match_mode": "recursive",
+        "ensure_exists": false,
+        "files": ["MiSound"]
+    },
+    {
+        "description": "Biometric Services",
+        "type": "dir",
+        "search_path": "product/app",
+        "match_mode": "glob",
+        "ensure_exists": true,
+        "files": ["*Biometric*"]
+    }
+]
