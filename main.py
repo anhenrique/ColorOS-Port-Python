@@ -80,22 +80,18 @@ def main():
         repack_images_dir = work_dir / "repack_images"
         repack_images_dir.mkdir(parents=True, exist_ok=True)
         
-        # Extract baserom firmware images (boot, dtbo, etc.) to repack_images_dir
-        logger.info("Extracting baserom firmware images...")
-        baserom_firmware = ["boot", "dtbo", "vbmeta", "vbmeta_system", "vbmeta_vendor"]
-        for fw in baserom_firmware:
-            fw_img = baserom.images_dir / f"{fw}.img"
-            if fw_img.exists():
-                import shutil
-                shutil.copy2(fw_img, repack_images_dir / fw_img.name)
-                logger.info(f"Copied {fw_img.name} to repack_images")
-        
-        # Also extract any other .img files from baserom that might be needed
+        # Copy all baserom .img files to repack_images_dir
+        logger.info("Copying baserom firmware images...")
+        copied_count = 0
         for fw_img in baserom.images_dir.glob("*.img"):
             dest = repack_images_dir / fw_img.name
             if not dest.exists():
                 import shutil
                 shutil.copy2(fw_img, dest)
+                logger.debug(f"Copied {fw_img.name} to repack_images")
+                copied_count += 1
+        
+        logger.info(f"Copied {copied_count} firmware images to repack_images")
         
         # Port ROM only needs specific partitions from config
         portrom_partitions = config.partition_to_port
