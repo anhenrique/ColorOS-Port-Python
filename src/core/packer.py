@@ -67,7 +67,9 @@ class Packer:
         cmd.extend([str(output_file), str(mount_point)])
         
         cmd_str = " ".join(cmd)
-        Shell.run(cmd_str)
+        logger.info(f"Packing {partition_name} with erofs...")
+        output = Shell.run(cmd_str)
+        logger.info(f"mkfs.erofs output for {partition_name}:\n{output}")
 
     def _pack_ext4(self, mount_point: Path, output_file: Path, partition_name: str):
         tool = self.tools.get_tool("make_ext4fs")
