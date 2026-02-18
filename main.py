@@ -67,15 +67,15 @@ def main():
     # Extract ROMs
     try:
         # Base ROM needs all partitions
-        baserom.extract(tools)
+        baserom.extract_images()
         # Port ROM only needs specific partitions: system, product, system_ext, and my_*
-        portrom_partitions = ["system", "product", "system_ext", "my_*"]
-        portrom.extract(tools, partitions=portrom_partitions)
+        portrom_partitions = ["system", "product", "system_ext", "my_product", "my_manifest"]
+        portrom.extract_images(portrom_partitions)
         
         # Also extract baserom partitions needed for props reading
         baserom_partitions = ["system", "product", "system_ext", "my_product", "my_manifest"]
         for part in baserom_partitions:
-            baserom.extract_partition_to_file(part, tools)
+            baserom.extract_partition_to_file(part)
     except Exception as e:
         logger.error(f"Failed to extract ROMs: {e}")
         sys.exit(1)

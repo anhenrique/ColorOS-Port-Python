@@ -64,7 +64,7 @@ class Context:
 
     def _copy_partition(self, partition, source_rom):
         # 1. Extract to internal source directory first (e.g. build/baserom/extracted/system)
-        src_dir = source_rom.extract_partition_to_file(partition, self.tools)
+        src_dir = source_rom.extract_partition_to_file(partition)
         
         if not src_dir or not src_dir.exists():
             return
