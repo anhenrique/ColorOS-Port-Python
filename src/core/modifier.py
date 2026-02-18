@@ -68,6 +68,12 @@ class SystemModifier:
         # ColorOS specific: Apply XML features from config
         self._apply_coloros_features()
         
+        # Optional: Dolby fix
+        self._fix_dolby_audio()
+        
+        # Optional: AI Memory / AppBooster
+        self._apply_ai_memory()
+        
         self._fix_vndk_apex()
         self._fix_vintf_manifest()
         
@@ -522,6 +528,98 @@ class SystemModifier:
                     new_lines.append(line)
             
             build_prop.write_text('\n'.join(new_lines), encoding='utf-8')
+
+    def _fix_dolby_audio(self):
+        """Fix Dolby audio and multi-app volume - port.sh line 1417-1422"""
+        self.logger.info("Checking for Dolby audio fix...")
+        
+        baserom = self.ctx.stock.extracted_dir
+        target = self.ctx.target_dir
+        
+        # Check if baserom has dolby effect type
+        dolby_prop = baserom / "my_product" / "build.prop"
+        if not dolby_prop.exists():
+            return
+        
+        content = dolby_prop.read_text(encoding='utf-8', errors='ignore')
+        if "ro.oplus.audio.effect.type=dolby" not in content:
+            return
+        
+        self.logger.info("Applying Dolby audio fix...")
+        
+        # Copy dolby xml
+        dolby_xml = baserom / "my_product" / "etc" / "permissions" / "oplus.product.features_dolby_stereo.xml"
+        target_xml = target / "my_product" / "etc" / "permissions" / "oplus.product.features_dolby_stereo.xml"
+        if dolby_xml.exists():
+            shutil.copy2(dolby_xml, target_xml)
+        
+        # Try to extract dolby_fix.zip from devices/common if exists
+        dolby_zip = Path("devices/common/dolby_fix.zip")
+        if dolby_zip.exists():
+            try:
+                with zipfile.ZipFile(dolby_zip, 'r') as z:
+                    z.extractall(target)
+                self.logger.info("Extracted dolby_fix.zip")
+            except Exception as e:
+                self.logger.warning(f"Failed to extract dolby_fix.zip: {e}")
+
+    def _apply_ai_memory(self):
+        """Apply AI Memory and AppBooster - port.sh line 1733-1754"""
+        self.logger.info("Applying AI Memory / AppBooster...")
+        
+        target = self.ctx.target_dir
+        ai_memory_zip = Path("devices/common/ai_memory.zip")
+        ai_memory_in_zip = Path("devices/common/ai_memory_in/aimemory.zip")
+        
+        # Determine which zip to use based on region
+        regionmark = getattr(self.ctx, 'regionmark', 'CN')
+        
+        if regionmark == "CN":
+            if ai_memory_zip.exists():
+                try:
+                    with zipfile.ZipFile(ai_memory_zip, 'r') as z:
+                        z.extractall(target)
+                    self.logger.info("Extracted ai_memory.zip")
+                except Exception as e:
+                    self.logger.warning(f"Failed to extract ai_memory.zip: {e}")
+        else:
+            if ai_memory_in_zip.exists():
+                try:
+                    with zipfile.ZipFile(ai_memory_in_zip, 'r') as z:
+                        z.extractall(target)
+                    self.logger.info("Extracted ai_memory_in/aimemory.zip")
+                except Exception as e:
+                    self.logger.warning(f"Failed to extract ai_memory_in/aimemory.zip: {e}")
+        
+        # Enable AIMemory and AppBooster in app_v2.xml
+        app_v2 = target / "my_product" / "etc" / "config" / "app_v2.xml"
+        if app_v2.exists():
+            content = app_v2.read_text(encoding='utf-8', errors='ignore')
+            for pkg in ["com.oplus.aimemory", "com.oplus.appbooster"]:
+                if f'<enable pkg="{pkg}"' not in content:
+                    content = content.replace("</app>", f'  <enable pkg="{pkg}" priority="7"/>\n</app>')
+            app_v2.write_text(content, encoding='utf-8')
+
+    def _remove_features_from_xml(self, features: list):
+        """Remove features from XML - port.sh remove_feature function"""
+        my_product_etc = self.ctx.target_dir / "my_product" / "etc"
+        if not my_product_etc.exists():
+            return
+        
+        for xml_file in my_product_etc.rglob("*.xml"):
+            try:
+                content = xml_file.read_text(encoding='utf-8', errors='ignore')
+                original_content = content
+                for feature in features:
+                    content = content.replace(feature, "")
+                    # Also remove empty lines
+                    content = re.sub(r'^\s*$', '', content, flags=re.MULTILINE)
+                
+                if content != original_content:
+                    xml_file.write_text(content, encoding='utf-8')
+                    self.logger.info(f"Removed features from {xml_file.name}")
+            except Exception:
+                pass
 
     def _migrate_my_product_configs(self):
         """Migrate my_product configs from baserom - port.sh lines 1404-1548"""
