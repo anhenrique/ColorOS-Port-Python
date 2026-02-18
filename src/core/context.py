@@ -182,20 +182,26 @@ class Context:
         # Use ThreadPoolExecutor for parallel partition installation
         max_workers = 4
         
+        partition_list = []
+        
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = []
             for part in self.config.possible_super_list:
+                 partition_list.append(part)
                  if part in self.config.partition_to_port:
                      futures.append(executor.submit(self._copy_partition, part, self.portrom))
                  else:
                      futures.append(executor.submit(self._copy_partition, part, self.baserom))
-            
+         
             for future in concurrent.futures.as_completed(futures):
                 try:
                     future.result()
                 except Exception as e:
                     self.logger.error(f"Partition install failed: {e}")
                     pass
+        
+        # Copy firmware images from baserom
+        self._copy_firmware_images(partition_list)
 
     def _copy_partition(self, partition, source_rom):
         # 1. Extract to internal source directory first (e.g. build/baserom/extracted/system)
@@ -223,3 +229,30 @@ class Context:
         if src_fc.exists():
              shutil.copy2(src_fc, self.target_config_dir / f"{partition}_file_contexts")
 
+    def _copy_firmware_images(self, exclude_list: list):
+        """
+        Copy firmware images from Base ROM that don't need modification.
+        Iterate .img files in baserom images/, excluding logical partitions.
+        """
+        self.logger.info("Copying firmware images from Base ROM...")
+        
+        if not self.baserom.images_dir.exists():
+            self.logger.warning("Base ROM images directory not found! Firmware copy skipped.")
+            return
+
+        copied_count = 0
+        for img_file in self.baserom.images_dir.glob("*.img"):
+            part_name = img_file.stem
+            
+            clean_name = part_name.replace("_a", "").replace("_b", "")
+            
+            if clean_name in exclude_list:
+                continue
+            
+            dest_path = self.repack_images_dir / img_file.name
+            
+            self.logger.debug(f"Copying firmware: {img_file.name}")
+            shutil.copy2(img_file, dest_path)
+            copied_count += 1
+            
+        self.logger.info(f"Copied {copied_count} firmware images to {self.repack_images_dir}")
