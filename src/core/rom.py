@@ -440,13 +440,29 @@ class RomPackage:
         """Detect filesystem type by reading magic bytes"""
         try:
             with open(img_path, 'rb') as f:
-                magic = f.read(16)
+                magic = f.read(128)
                 
-                # EROFS magic bytes
-                if len(magic) >= 4 and magic[0:2] == bytes([0xE0, 0x52]) and magic[2:4] == bytes([0x4F, 0x46]):
-                    return "erofs"
+                # EROFS magic bytes: "EROFS" at offset 0
+                # EROFS (0x45 0x52 0x4F 0x46) or little endian variant
+                if len(magic) >= 4:
+                    # Check for EROFS magic (both big and little endian)
+                    if magic[0:4] == bytes([0x45, 0x52, 0x4F, 0x46]):  # "EROFS"
+                        return "erofs"
+                    if magic[0:4] == bytes([0xE0, 0x52, 0x4F, 0x46]):  # alternative EROFS magic
+                        return "erofs"
+                    # Also check at offset 0x400 (some EROFS images have super block there)
+                    if len(magic) >= 0x440:
+                        if magic[0x400:0x404] == bytes([0x45, 0x52, 0x4F, 0x46]):
+                            return "erofs"
+                        if magic[0x400:0x404] == bytes([0xE0, 0x52, 0x4F, 0x46]):
+                            return "erofs"
                 
-                # ext4 magic: 0x53 0xEF
+                # ext4 magic: 0x53 0xEF at offset 0x38C
+                if len(magic) >= 0x390:
+                    if magic[0x38C:0x38E] == bytes([0x53, 0xEF]):
+                        return "ext4"
+                
+                # Also check at start of file for ext4
                 if len(magic) >= 2 and magic[0:2] == bytes([0x53, 0xef]):
                     return "ext4"
                 
