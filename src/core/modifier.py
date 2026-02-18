@@ -367,6 +367,11 @@ class SystemModifier:
         self._apply_coloros_xml_features(config.get("permission_feature", []), "permission_feature")
         self._apply_coloros_xml_features(config.get("permission_oplus_feature", []), "permission_oplus_feature")
         
+        # Remove features from XML
+        features_remove = config.get("features_remove", [])
+        if features_remove:
+            self._remove_features_from_xml(features_remove)
+        
         # Apply props remove/add
         props_remove = config.get("props_remove", [])
         if props_remove:
