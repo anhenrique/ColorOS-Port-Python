@@ -65,14 +65,14 @@ class PropertyModifier:
         
         # Helper to find prop in images directory
         def find_in_images(rom, part_dir, key):
-            return find_prop_in_dir(rom.images_dir / part_dir, key, ["system_dlkm", "odm_dlkm"])
+            return find_prop_in_dir(rom.extracted_dir / part_dir, key, ["system_dlkm", "odm_dlkm"])
         
         # === Base ROM Properties ===
-        base_system = baserom.images_dir / "system" / "system"
-        base_manifest = baserom.images_dir / "my_manifest"
-        base_product = baserom.images_dir / "my_product"
-        base_vendor = baserom.images_dir / "vendor"
-        base_system_ext = baserom.images_dir / "system_ext"
+        base_system = baserom.extracted_dir / "system" / "system"
+        base_manifest = baserom.extracted_dir / "my_manifest"
+        base_product = baserom.extracted_dir / "my_product"
+        base_vendor = baserom.extracted_dir / "vendor"
+        base_system_ext = baserom.extracted_dir / "system_ext"
         
         # Android version
         self.base_android_version = read_prop_from_file(base_system / "build.prop", "ro.build.version.release")
@@ -103,13 +103,13 @@ class PropertyModifier:
         # Market name
         self.base_market_name = read_prop_from_file(base_manifest / "build.prop", "ro.vendor.oplus.market.name")
         if not self.base_market_name:
-            self.base_market_name = read_prop_from_file(baserom.images_dir / "odm" / "build.prop", "ro.vendor.oplus.market.name")
+            self.base_market_name = read_prop_from_file(baserom.extracted_dir / "odm" / "build.prop", "ro.vendor.oplus.market.name")
         self.ctx.base_market_name = self.base_market_name
         
         # Market enname
         self.base_market_enname = read_prop_from_file(base_manifest / "build.prop", "ro.vendor.oplus.market.enname")
         if not self.base_market_enname:
-            self.base_market_enname = read_prop_from_file(baserom.images_dir / "odm" / "build.prop", "ro.vendor.oplus.market.enname")
+            self.base_market_enname = read_prop_from_file(baserom.extracted_dir / "odm" / "build.prop", "ro.vendor.oplus.market.enname")
         self.ctx.base_market_enname = self.base_market_enname
         
         # my_product type
@@ -120,7 +120,7 @@ class PropertyModifier:
         
         # device_family
         self.base_device_family = None
-        for prop_file in [baserom.images_dir / "odm" / "build.prop", base_product / "build.prop"]:
+        for prop_file in [baserom.extracted_dir / "odm" / "build.prop", base_product / "build.prop"]:
             self.base_device_family = read_prop_from_file(prop_file, "ro.build.device_family")
             if self.base_device_family:
                 break
@@ -129,25 +129,25 @@ class PropertyModifier:
         self.base_vendor_brand = read_prop_from_file(base_manifest / "build.prop", "ro.product.vendor.brand")
         
         # Security patch (port rom)
-        self.portrom_version_security_patch = read_prop_from_file(portrom.images_dir / "my_manifest" / "build.prop", "ro.build.version.security_patch")
+        self.portrom_version_security_patch = read_prop_from_file(portrom.extracted_dir / "my_manifest" / "build.prop", "ro.build.version.security_patch")
         self.ctx.security_patch = self.portrom_version_security_patch
         
         # Region mark
-        self.base_regionmark = find_prop_in_dir(baserom.images_dir, "ro.vendor.oplus.regionmark")
+        self.base_regionmark = find_prop_in_dir(baserom.extracted_dir, "ro.vendor.oplus.regionmark")
         if not self.base_regionmark:
-            self.base_regionmark = find_prop_in_dir(baserom.images_dir, "ro.oplus.image.my_region.type")
+            self.base_regionmark = find_prop_in_dir(baserom.extracted_dir, "ro.oplus.image.my_region.type")
             if self.base_regionmark:
                 self.base_regionmark = self.base_regionmark.split('_')[0]
         
         # Base area and brand
-        self.base_area = find_prop_in_dir(baserom.images_dir, "ro.oplus.image.system_ext.area", ["odm"])
-        self.base_brand = find_prop_in_dir(baserom.images_dir, "ro.oplus.image.system_ext.brand", ["odm"])
+        self.base_area = find_prop_in_dir(baserom.extracted_dir, "ro.oplus.image.system_ext.area", ["odm"])
+        self.base_brand = find_prop_in_dir(baserom.extracted_dir, "ro.oplus.image.system_ext.brand", ["odm"])
         
         # === Port ROM Properties ===
-        port_system = portrom.images_dir / "system" / "system"
-        port_manifest = portrom.images_dir / "my_manifest"
-        port_product = portrom.images_dir / "my_product"
-        port_vendor = portrom.images_dir / "vendor"
+        port_system = portrom.extracted_dir / "system" / "system"
+        port_manifest = portrom.extracted_dir / "my_manifest"
+        port_product = portrom.extracted_dir / "my_product"
+        port_vendor = portrom.extracted_dir / "vendor"
         
         self.port_android_version = read_prop_from_file(port_system / "build.prop", "ro.build.version.release")
         self.ctx.port_android_version = self.port_android_version
@@ -166,7 +166,7 @@ class PropertyModifier:
         self.port_product_model = read_prop_from_file(port_manifest / "build.prop", "ro.product.model")
         
         # Market name (port)
-        self.port_market_name = find_prop_in_dir(portrom.images_dir, "ro.vendor.oplus.market.name", ["odm"])
+        self.port_market_name = find_prop_in_dir(portrom.extracted_dir, "ro.vendor.oplus.market.name", ["odm"])
         
         self.port_my_product_type = read_prop_from_file(port_product / "build.prop", "ro.oplus.image.my_product.type")
         
@@ -187,7 +187,7 @@ class PropertyModifier:
         self.port_vendor_brand = read_prop_from_file(port_manifest / "build.prop", "ro.product.vendor.brand")
         
         # ssi brand
-        self.port_ssi_brand = read_prop_from_file(portrom.images_dir / "system_ext" / "etc" / "build.prop", "ro.oplus.image.system_ext.brand")
+        self.port_ssi_brand = read_prop_from_file(portrom.extracted_dir / "system_ext" / "etc" / "build.prop", "ro.oplus.image.system_ext.brand")
         
         # first_api_level (port)
         self.port_product_first_api_level = read_prop_from_file(port_manifest / "build.prop", "ro.product.first_api_level")
@@ -199,11 +199,11 @@ class PropertyModifier:
         self.vendor_cpu_abilist32 = read_prop_from_file(port_vendor / "build.prop", "ro.vendor.product.cpu.abilist32")
         
         # Region mark (port)
-        self.regionmark = find_prop_in_dir(portrom.images_dir, "ro.vendor.oplus.regionmark")
+        self.regionmark = find_prop_in_dir(portrom.extracted_dir, "ro.vendor.oplus.regionmark")
         
         # Area and brand (port)
-        self.port_area = find_prop_in_dir(portrom.images_dir, "ro.oplus.image.system_ext.area", ["odm"])
-        self.port_brand = find_prop_in_dir(portrom.images_dir, "ro.oplus.image.system_ext.brand", ["odm"])
+        self.port_area = find_prop_in_dir(portrom.extracted_dir, "ro.oplus.image.system_ext.area", ["odm"])
+        self.port_brand = find_prop_in_dir(portrom.extracted_dir, "ro.oplus.image.system_ext.brand", ["odm"])
         
         # ROM type detection
         self.portIsRealmeUI = (self.port_brand == "realme")
@@ -212,7 +212,7 @@ class PropertyModifier:
         self.portIsColorOS = not (self.portIsColorOSGlobal or self.portIsOOS or self.portIsRealmeUI)
         
         # LCD Density from base
-        self.base_rom_density = find_prop_in_dir(baserom.images_dir, "ro.sf.lcd_density", ["odm"])
+        self.base_rom_density = find_prop_in_dir(baserom.extracted_dir, "ro.sf.lcd_density", ["odm"])
         if not self.base_rom_density:
             self.base_rom_density = "480"
         
@@ -221,11 +221,11 @@ class PropertyModifier:
         self.ctx.is_ab_device = (is_ab == "true")
         
         # ROM version
-        self.base_rom_version = read_prop_from_file(baserom.images_dir / "my_manifest" / "build.prop", "ro.build.display.ota")
+        self.base_rom_version = read_prop_from_file(baserom.extracted_dir / "my_manifest" / "build.prop", "ro.build.display.ota")
         if self.base_rom_version:
             self.base_rom_version = self.base_rom_version.split('_', 1)[1] if '_' in self.base_rom_version else self.base_rom_version
         
-        self.port_rom_version = read_prop_from_file(portrom.images_dir / "my_manifest" / "build.prop", "ro.build.display.ota")
+        self.port_rom_version = read_prop_from_file(portrom.extracted_dir / "my_manifest" / "build.prop", "ro.build.display.ota")
         if self.port_rom_version:
             self.port_rom_version = self.port_rom_version.split('_', 1)[1] if '_' in self.port_rom_version else self.port_rom_version
         
@@ -249,7 +249,7 @@ class PropertyModifier:
         portrom = self.ctx.portrom
         
         # Find all build.prop files in portrom images
-        for build_prop in portrom.images_dir.rglob("build.prop"):
+        for build_prop in portrom.extracted_dir.rglob("build.prop"):
             if "system_dlkm" in str(build_prop) or "odm_dlkm" in str(build_prop):
                 continue
             
