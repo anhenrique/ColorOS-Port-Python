@@ -267,18 +267,19 @@ class RomPackage:
         try:
             if fs_type == "erofs":
                 tool = tools.get_tool("extract.erofs")
-                # extract.erofs -x -i input -o output
                 Shell.run(f"{tool} -i {img_path} -x -o {target_dir}")
                 
             elif fs_type == "ext4":
-                 # Use 7z
-                 tool = "7z" 
                  Shell.run(f"7z x {img_path} -o{target_dir} -y")
             else:
                  logger.warning(f"Unknown filesystem type for {part_name} in {img_path}")
                  return None
                  
             self._organize_config_files(part_name, target_dir)
+            
+            img_path.unlink(missing_ok=True)
+            logger.info(f"[{self.label}] Deleted {img_path.name} to save space")
+            
             return target_dir
             
         except Exception as e:
