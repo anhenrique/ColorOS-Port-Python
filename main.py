@@ -80,10 +80,21 @@ def main():
         repack_images_dir = work_dir / "repack_images"
         repack_images_dir.mkdir(parents=True, exist_ok=True)
         
-        # Copy all baserom .img files to repack_images_dir
+        # Copy firmware images from baserom to repack_images (exclude logical partitions)
         logger.info("Copying baserom firmware images...")
+        
+        logical_partitions = {"system", "vendor", "product", "system_ext", "odm", "mi_ext", 
+                             "my_product", "my_manifest", "my_stock", "my_region", "my_carrier",
+                             "my_heytap", "my_bigball", "my_engineering", "vendor_dlkm", "odm_dlkm", 
+                             "system_dlkm", "product_dlkm"}
+        
         copied_count = 0
         for fw_img in baserom.images_dir.glob("*.img"):
+            part_name = fw_img.stem.replace("_a", "").replace("_b", "")
+            
+            if part_name in logical_partitions:
+                continue
+            
             dest = repack_images_dir / fw_img.name
             import shutil
             shutil.copy2(fw_img, dest)
