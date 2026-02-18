@@ -729,13 +729,6 @@ class Repacker:
     def _copy_build_props(self):
         """Copy build.prop of each partition to directories required by META structure"""
 
-        mapping = {
-            "system": "SYSTEM",
-            "product": "PRODUCT",
-            "system_ext": "SYSTEM_EXT",
-            "vendor": "VENDOR",
-        }
-        
         # Special handling for ODM: use my_manifest's build.prop which contains ro.product.odm.device
         odm_prop = self.ctx.get_target_prop_file("my_manifest")
         if odm_prop and odm_prop.exists():
@@ -760,15 +753,32 @@ class Repacker:
             else:
                 self.logger.warning("build.prop for PRODUCT not found, OTA metadata might be incomplete.")
         
-        # Handle other partitions
-        for part_lower, part_upper in mapping.items():
-            if part_upper in ["SYSTEM", "PRODUCT", "ODM"]:
-                continue  # Already handled above
-            src_prop = self.ctx.get_target_prop_file(part_lower)
-            if src_prop and src_prop.exists():
-                shutil.copy2(src_prop, self.product_out / part_upper / "build.prop")
+        # Handle SYSTEM - try system first, then system/system (nested)
+        system_prop = self.ctx.get_target_prop_file("system")
+        if system_prop and system_prop.exists():
+            shutil.copy2(system_prop, self.product_out / "SYSTEM" / "build.prop")
+        else:
+            # Try nested path
+            nested_system = self.ctx.target_dir / "system" / "system" / "build.prop"
+            if nested_system.exists():
+                shutil.copy2(nested_system, self.product_out / "SYSTEM" / "build.prop")
+                self.logger.info("Using nested system/system/build.prop for SYSTEM")
             else:
-                self.logger.warning(f"build.prop for {part_lower} not found, OTA metadata might be incomplete.")
+                self.logger.warning("build.prop for SYSTEM not found, OTA metadata might be incomplete.")
+        
+        # Handle system_ext
+        system_ext_prop = self.ctx.get_target_prop_file("system_ext")
+        if system_ext_prop and system_ext_prop.exists():
+            shutil.copy2(system_ext_prop, self.product_out / "SYSTEM_EXT" / "build.prop")
+        else:
+            self.logger.warning("build.prop for SYSTEM_EXT not found, OTA metadata might be incomplete.")
+        
+        # Handle vendor
+        vendor_prop = self.ctx.get_target_prop_file("vendor")
+        if vendor_prop and vendor_prop.exists():
+            shutil.copy2(vendor_prop, self.product_out / "VENDOR" / "build.prop")
+        else:
+            self.logger.warning("build.prop for VENDOR not found, OTA metadata might be incomplete.")
 
     def _run_ota_tool(self):
         """Call ota_from_target_files to generate ZIP"""
