@@ -21,6 +21,7 @@ def parse_args():
     parser.add_argument("--portrom", required=True, help="Path to Port ROM")
     parser.add_argument("--device_code", help="Device code for configuration override")
     parser.add_argument("--work_dir", default="build", help="Working directory")
+    parser.add_argument("--pack_type", choices=["super", "payload"], default="payload", help="Output format: super (Fastboot) or payload (OTA). Default: payload")
     return parser.parse_args()
 
 def detect_device_code(rom_path: str, args_device_code: str | None = None) -> str | None:
@@ -66,8 +67,26 @@ def main():
 
     # Extract ROMs
     try:
-        # Base ROM needs all partitions
+        # Base ROM needs all partitions (including firmware)
         baserom.extract_images()
+        
+        # Extract baserom firmware images (boot, dtbo, etc.) to repack_images_dir
+        logger.info("Extracting baserom firmware images...")
+        baserom_firmware = ["boot", "dtbo", "vbmeta", "vbmeta_system", "vbmeta_vendor"]
+        for fw in baserom_firmware:
+            fw_img = baserom.images_dir / f"{fw}.img"
+            if fw_img.exists():
+                import shutil
+                shutil.copy2(fw_img, work_dir / "repack_images" / fw_img.name)
+                logger.info(f"Copied {fw_img.name} to repack_images")
+        
+        # Also extract any other .img files from baserom that might be needed
+        for fw_img in baserom.images_dir.glob("*.img"):
+            dest = work_dir / "repack_images" / fw_img.name
+            if not dest.exists():
+                import shutil
+                shutil.copy2(fw_img, dest)
+        
         # Port ROM only needs specific partitions from config
         portrom_partitions = config.partition_to_port
         portrom.extract_images(portrom_partitions)
@@ -132,7 +151,18 @@ def main():
     # Stage 4: Repacking
     logger.info("Starting Stage 4: Repacking...")
     packer = Repacker(ctx)
-    packer.pack_all(pack_type="EROFS", is_rw=False)
+    
+    # Determine pack format
+    pack_type = args.pack_type.upper()
+    if pack_type == "SUPER":
+        packer.pack_all(pack_type="EROFS", is_rw=False)
+        packer.pack_super_image()
+        logger.info("Super image packing complete.")
+    else:
+        # Payload format (OTA)
+        packer.pack_all(pack_type="EROFS", is_rw=False)
+        packer.pack_ota_payload()
+        logger.info("OTA payload packing complete.")
 
     logger.info("Porting process (Stage 1-4) complete.")
 
