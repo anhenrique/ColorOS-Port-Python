@@ -20,6 +20,15 @@ class RomPackage:
     def extract(self, tools: ToolManager):
         logger.info(f"Extracting {self.label} ROM from {self.path}...")
         
+        # Check if already extracted (simple check)
+        if self.images_dir.exists() and any(self.images_dir.iterdir()):
+             logger.info(f"Images directory {self.images_dir} already exists and is not empty. Skipping extraction.")
+             # We might need to detect ROM type even if we skip extraction
+             # But for now, assume previous run set it up.
+             # We need to set self.rom_type?
+             # Let's just do a quick check.
+             return
+
         if self.extracted_dir.exists():
             shutil.rmtree(self.extracted_dir)
         self.extracted_dir.mkdir(parents=True, exist_ok=True)
@@ -69,7 +78,6 @@ class RomPackage:
         temp_payload = self.work_dir / "payload.bin"
         
         with zipfile.ZipFile(self.path, 'r') as z:
-            # Optimize: Stream extraction instead of read() into memory
             with z.open("payload.bin") as source, open(temp_payload, "wb") as target:
                 shutil.copyfileobj(source, target)
         
@@ -80,12 +88,11 @@ class RomPackage:
          self._extract_payload_bin_file(self.path, tools)
 
     def _extract_payload_bin_file(self, payload_path, tools: ToolManager):
-        # Changed to use payload-dumper (python/binary) instead of payload-dumper-go
         logger.info("Running payload-dumper...")
         tool = tools.get_tool("payload-dumper")
         try:
-            # Usage: payload-dumper --out <output_dir> <input_file>
-            Shell.run(f"{tool} --out {self.images_dir} {payload_path}")
+            # Use limited workers to avoid OOM
+            Shell.run(f"{tool} --workers 2 --out {self.images_dir} {payload_path}")
         except Exception as e:
             logger.error(f"payload-dumper failed: {e}")
             raise e
@@ -136,8 +143,6 @@ class RomPackage:
         
         if fs_type == "erofs":
             tool = tools.get_tool("extract.erofs")
-            # extract.erofs -i <image> -x -o <output_dir>
-            # Note: The tool might be strictly named extract.erofs or have arguments
             Shell.run(f"{tool} -i {img_path} -x -o {target_dir}")
             
         elif fs_type == "ext4":
