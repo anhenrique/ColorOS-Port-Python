@@ -1,6 +1,7 @@
 import logging
 import os
 import shutil
+import re
 from pathlib import Path
 from src.core.context import Context
 from src.utils.shell import Shell
@@ -26,13 +27,12 @@ class Packer:
         # 1. Pack individual partitions
         self._pack_partitions()
         
-        # 2. Pack Super Image (if needed, logic to be added)
-        # self._pack_super()
+        # 2. Pack Super Image
+        self._pack_super()
         
         logger.info("Repacking Complete.")
 
     def _pack_partitions(self):
-        # Iterate over partitions in target_dir
         for partition_dir in self.target_dir.iterdir():
             if not partition_dir.is_dir():
                 continue
@@ -42,8 +42,7 @@ class Packer:
             
             output_img = self.repack_dir / f"{part_name}.img"
             
-            # Determine method (default to erofs if not specified)
-            method = self.config.pack_method # "erofs" or "ext4"
+            method = self.config.pack_method
             
             if method == "erofs":
                 self._pack_erofs(partition_dir, output_img, part_name)
@@ -54,80 +53,138 @@ class Packer:
                 self._pack_erofs(partition_dir, output_img, part_name)
 
     def _pack_erofs(self, mount_point: Path, output_file: Path, partition_name: str):
-        # Tool: mkfs.erofs
         tool = self.tools.get_tool("mkfs.erofs")
         
-        # Look for fs_config and file_contexts
-        # They should have been extracted to work_dir/extracted/config/ or similar
-        # But wait, our Context/RomPackage architecture extracted them to:
-        # baserom.extracted_dir / config / ...
-        # portrom.extracted_dir / config / ...
-        # We need to know WHICH ROM this partition came from to find the original config.
-        # OR, we should have copied them to a central location in Context.
-        
-        # Current Context.install_partitions implementation:
-        # It calls `source_rom.extract_partition(partition, target_path, tools)`
-        # `RomPackage.extract_partition` just extracts the image. It DOES NOT currently handle fs_config/file_contexts extraction explicitly 
-        # (unlike the HyperOS reference I saw earlier).
-        
-        # CRITICAL MISSING PIECE: We need fs_config/file_contexts.
-        # For now, we will assume standard Android permissions (using --mount-point) 
-        # or try to find them if they were extracted by extract.erofs
-        
-        # Logic: 
-        # 1. extract.erofs -x -o target_dir extracts the image. 
-        #    It usually creates `file_contexts` inside the target_dir or parent?
-        #    Let's check `RomPackage.extract_partition`: `extract.erofs -i {img} -x -o {target_dir}`
-        
-        fs_config_file = mount_point / "config" / f"{partition_name}_fs_config" # Hypothetical
-        file_contexts_file = mount_point / "config" / f"{partition_name}_file_contexts" # Hypothetical
-
-        # Try to find file_contexts in the root of the extracted partition (common behavior of extraction tools)
+        # Try to find file_contexts
         potential_fc = list(mount_point.glob("*file_contexts"))
         real_fc = potential_fc[0] if potential_fc else None
-        
-        # Command Construction
-        # -zlz4hc: Compression
-        # -T 1230768000: Fixed timestamp for reproducibility
-        # --mount-point: Mount point prefix (e.g. /system)
         
         cmd = [tool, "-zlz4hc", "-T", "1230768000", "--mount-point", f"/{partition_name}"]
         
         if real_fc:
             cmd.extend(["--file-contexts", str(real_fc)])
             
-        # fs_config is trickier. Often we need to generate it or use `fs_config` file.
-        # For now, we omit --fs-config-file unless we have one.
-        
         cmd.extend([str(output_file), str(mount_point)])
         
-        # Convert list to string for Shell.run
         cmd_str = " ".join(cmd)
         Shell.run(cmd_str)
 
     def _pack_ext4(self, mount_point: Path, output_file: Path, partition_name: str):
-        # Tool: make_ext4fs
         tool = self.tools.get_tool("make_ext4fs")
-        
-        # Identify size logic?
-        # Usually we need -l <size>. If not provided, it might fail or auto-detect.
-        # Ideally we read original size or set a safe large size (if sparse).
-        
-        # Simplified:
         cmd = [tool, "-J", "-T", "1230768000", "-L", partition_name]
         
-        # Check for file_contexts
         potential_fc = list(mount_point.glob("*file_contexts"))
         if potential_fc:
              cmd.extend(["-S", str(potential_fc[0])])
              
-        # Size? 
-        # Let's try without size (auto) or large size if sparse
-        # make_ext4fs -l 4096M ...
-        # Safe default for large partitions?
-        cmd.extend(["-l", "6000M"]) # Temporary hardcode, normally calculated
-        
+        cmd.extend(["-l", "6000M"]) 
         cmd.extend([str(output_file), str(mount_point)])
         
         cmd_str = " ".join(cmd)
         Shell.run(cmd_str)
+
+    def _pack_super(self):
+        logger.info("Packing super.img...")
+        
+        # 1. Determine size
+        device_code = self.ctx.device_code
+        super_size = self._get_super_size(device_code)
+        logger.info(f"Using super size: {super_size} for device {device_code}")
+
+        # 2. Determine AB status
+        is_ab = self._is_ab_device()
+        logger.info(f"Is AB Device: {is_ab}")
+
+        # 3. Construct lpmake command
+        tool = self.tools.get_tool("lpmake")
+        
+        # Basic args
+        cmd = [tool, "--metadata-size", "65536", "--super-name", "super"]
+        
+        if is_ab:
+            cmd.extend(["--metadata-slots", "3"])
+            cmd.extend(["--device", f"super:{super_size}"])
+            cmd.extend([f"--group=qti_dynamic_partitions_a:{super_size}"])
+            cmd.extend([f"--group=qti_dynamic_partitions_b:{super_size}"])
+            cmd.extend(["--virtual-ab"])
+        else:
+            cmd.extend(["--metadata-slots", "2"])
+            cmd.extend(["--device", f"super:{super_size}"])
+            cmd.extend([f"--group=qti_dynamic_partitions:{super_size}"])
+
+        # Add partitions
+        # Iterate through possible_super_list from config, check if img exists in repack_dir
+        for part in self.config.possible_super_list:
+            img_path = self.repack_dir / f"{part}.img"
+            if not img_path.exists():
+                continue
+            
+            size = img_path.stat().st_size
+            logger.info(f"Adding {part} ({size} bytes) to super")
+            
+            if is_ab:
+                # Add _a partition
+                cmd.extend([f"--partition", f"{part}_a:none:{size}:qti_dynamic_partitions_a"])
+                cmd.extend([f"--image", f"{part}_a={img_path}"])
+                # Add _b partition (empty)
+                cmd.extend([f"--partition", f"{part}_b:none:0:qti_dynamic_partitions_b"])
+            else:
+                cmd.extend([f"--partition", f"{part}:none:{size}:qti_dynamic_partitions"])
+                cmd.extend([f"--image", f"{part}={img_path}"])
+
+        # Output
+        output_super = self.repack_dir / "super.img"
+        cmd.extend(["--output", str(output_super)])
+        
+        # Execute
+        cmd_str = " ".join(cmd)
+        Shell.run(cmd_str)
+        
+        if output_super.exists():
+            logger.info(f"Successfully created super.img at {output_super}")
+        else:
+            logger.error("Failed to create super.img")
+
+    def _get_super_size(self, device_code):
+        # Default fallback
+        default_size = "15032385536"
+        
+        if not device_code:
+            return default_size
+            
+        sizes = {
+            "OnePlus9R": "9932111872",
+            "OnePlus8T": "7516192768",
+            "OnePlus8": "15032385536",
+            "OnePlus8Pro": "15032385536",
+            "OP4E5D": "11190403072",
+            "OnePlus9": "11190403072",
+            "OnePlus9Pro": "11190403072",
+            "OP4E3F": "11186208768",
+            "OP4F57L1": "11186208768",
+            "RE54E4L1": "11274289152",
+            "RMX3371": "11274289152",
+            "OP5CFBL1": "16106127360",
+            "RE5473": "10200547328",
+            "RE879AL1": "10200547328",
+            "OP5D2BL1": "14574100480",
+            "OP60F5L1": "14952693760",
+            "PKX110": "15032385536", # Added for test if needed, usually falls to default
+        }
+        
+        return sizes.get(device_code, default_size)
+
+    def _is_ab_device(self):
+        # Check vendor/build.prop for ro.build.ab_update
+        prop_file = self.target_dir / "vendor/build.prop"
+        if not prop_file.exists():
+            return False # Default to A-only if unknown? Or check baserom?
+            
+        try:
+            with open(prop_file, 'r', errors='ignore') as f:
+                for line in f:
+                    if "ro.build.ab_update=true" in line:
+                        return True
+        except:
+            pass
+        return False
