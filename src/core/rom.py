@@ -385,22 +385,21 @@ class RomPackage:
         target_dir.mkdir(parents=True, exist_ok=True)
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
-        # 3. Call extraction tool (erofs or ext4)
-        # Corresponds to functions.sh: extract_partition
-        # Assuming unified tool script or direct extract.erofs call
-        
-        # Simulation: Identify type (Simplified, default to erofs)
-        is_erofs = True # Should strictly check magic number
+        # 3. Detect filesystem type and extract accordingly
+        fs_type = self._detect_filesystem(img_path)
         
         try:
-            if is_erofs:
-                # extract.erofs -i input.img -x (extract) -o output_dir
-                # Note: extract.erofs generates file_contexts in output dir by default
+            if fs_type == "erofs":
                 cmd = ["extract.erofs", "-x", "-i", str(img_path), "-o", str(self.extracted_dir)]
                 self.shell.run(cmd, capture_output=True)
+            elif fs_type == "ext4":
+                # Use 7z to extract ext4 images
+                import subprocess
+                cmd = ["7z", "x", str(img_path), f"-o{self.extracted_dir}", "-y"]
+                subprocess.run(cmd, check=True)
             else:
-                # ext4 handling
-                pass
+                self.logger.warning(f"Unknown filesystem for {part_name}, skipping extraction.")
+                return None
         except Exception as e:
             self.logger.error(f"Failed to extract {part_name}: {e}")
             return None
@@ -436,6 +435,29 @@ class RomPackage:
             self.config_dir / f"{part_name}_fs_config",
             self.config_dir / f"{part_name}_file_contexts"
         )
+
+    def _detect_filesystem(self, img_path: Path) -> str:
+        """Detect filesystem type by reading magic bytes"""
+        try:
+            with open(img_path, 'rb') as f:
+                magic = f.read(16)
+                
+                # EROFS magic bytes
+                if len(magic) >= 4 and magic[0:2] == bytes([0xE0, 0x52]) and magic[2:4] == bytes([0x4F, 0x46]):
+                    return "erofs"
+                
+                # ext4 magic: 0x53 0xEF
+                if len(magic) >= 2 and magic[0:2] == bytes([0x53, 0xef]):
+                    return "ext4"
+                
+                # f2fs magic: 0xF2 0xF0 0x52 0x10
+                if len(magic) >= 4 and magic[0:4] == bytes([0xf2, 0xf0, 0x52, 0x10]):
+                    return "f2fs"
+                    
+        except Exception as e:
+            self.logger.warning(f"Failed to detect filesystem for {img_path}: {e}")
+        
+        return "unknown"
     
     def parse_all_props(self):
         """
