@@ -119,7 +119,7 @@ class PropertyModifier:
         with open(file_path, 'r', errors='ignore') as f:
             for line in f:
                 line = line.strip()
-                # 跳过空行和注释行，只匹配 ^key= 格式
+                # Skip empty lines and comments, match ^key= format
                 if line and not line.startswith('#') and line.startswith(key + '='):
                     return line.split('=', 1)[1].strip()
         return None
