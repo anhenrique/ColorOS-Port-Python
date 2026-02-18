@@ -744,7 +744,7 @@ class SystemModifier:
             graphic_dst.unlink(missing_ok=True)
         
         # Fix wechat/whatsapp volume issue
-        for xml_file in baserom_my_product / "etc" / "audio*.xml":
+        for xml_file in (baserom_my_product / "etc").glob("audio*.xml"):
             if xml_file.exists():
                 shutil.copy2(xml_file, target_my_product / "etc" / xml_file.name)
         
