@@ -78,12 +78,14 @@ class RomPackage:
          self._extract_payload_bin_file(self.path, tools)
 
     def _extract_payload_bin_file(self, payload_path, tools: ToolManager):
-        logger.info("Running payload-dumper-go...")
-        tool = tools.get_tool("payload-dumper-go")
+        # Changed to use payload-dumper (python/binary) instead of payload-dumper-go
+        logger.info("Running payload-dumper...")
+        tool = tools.get_tool("payload-dumper")
         try:
-            Shell.run(f"{tool} -o {self.images_dir} {payload_path}")
+            # Usage: payload-dumper --out <output_dir> <input_file>
+            Shell.run(f"{tool} --out {self.images_dir} {payload_path}")
         except Exception as e:
-            logger.error(f"payload-dumper-go failed: {e}")
+            logger.error(f"payload-dumper failed: {e}")
             raise e
 
     def _extract_br_zip(self, tools: ToolManager):
@@ -132,6 +134,8 @@ class RomPackage:
         
         if fs_type == "erofs":
             tool = tools.get_tool("extract.erofs")
+            # extract.erofs -i <image> -x -o <output_dir>
+            # Note: The tool might be strictly named extract.erofs or have arguments
             Shell.run(f"{tool} -i {img_path} -x -o {target_dir}")
             
         elif fs_type == "ext4":
