@@ -25,12 +25,23 @@ class Context:
         self.device_code = device_code
         self.stock_rom_code = device_code
         
-        # Additional attributes needed by packer.py
+        # Additional attributes needed by packer.py and props.py
         self.target_rom_version = "1.0"  # Default version
         self.base_android_version = "14"  # Default
         self.port_android_version = "14"  # Default
+        self.base_android_sdk = "34"  # Default
+        self.port_android_sdk = "34"  # Default
         self.security_patch = "2024-01-01"  # Default
         self.is_ab_device = False  # Default, will be detected
+        
+        # ROM properties (populated by PropertyModifier)
+        self.base_device_code = None
+        self.base_product_device = None
+        self.base_product_name = None
+        self.base_product_model = None
+        self.base_market_name = None
+        self.base_market_enname = None
+        self.base_regionmark = None
         
         self.logger = logger
         
