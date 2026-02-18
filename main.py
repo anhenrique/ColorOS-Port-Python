@@ -97,7 +97,8 @@ def main():
 
     # Initialize Context with finalized config
     logger.info("Initializing Porting Context...")
-    ctx = Context(config, baserom, portrom, work_dir) 
+    # Pass device_code to Context
+    ctx = Context(config, baserom, portrom, work_dir, device_code) 
     
     # Stage 1: Install Partitions
     logger.info("Starting Stage 1: Partition Installation...")
