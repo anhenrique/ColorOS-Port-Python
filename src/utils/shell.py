@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 class Shell:
     @staticmethod
-    def run(command: str, cwd: Optional[str] = None, check: bool = True) -> str:
+    def run(command: str, cwd: Optional[str] = None, check: bool = True, capture_output: bool = True) -> str:
         logger.debug(f"Running command: {command}")
         if not command:
             return ""
@@ -25,18 +25,32 @@ class Shell:
         env["LD_LIBRARY_PATH"] = f"{lib_path}:{current_ld}"
 
         try:
-            result = subprocess.run(
-                shlex.split(command),
-                cwd=cwd,
-                check=check,
-                capture_output=True,
-                text=True,
-                env=env
-            )
-            return result.stdout.strip()
+            if capture_output:
+                result = subprocess.run(
+                    shlex.split(command),
+                    cwd=cwd,
+                    check=check,
+                    capture_output=True,
+                    text=True,
+                    env=env
+                )
+                return result.stdout.strip()
+            else:
+                # Stream output directly to console
+                result = subprocess.run(
+                    shlex.split(command),
+                    cwd=cwd,
+                    check=check,
+                    capture_output=False, # This pipes directly to stdout/stderr
+                    text=True,
+                    env=env
+                )
+                return "" # No output captured
+                
         except subprocess.CalledProcessError as e:
             logger.error(f"Command failed: {command}")
-            logger.error(f"Error output: {e.stderr}")
+            if capture_output:
+                logger.error(f"Error output: {e.stderr}")
             if check:
                 raise e
             return ""
