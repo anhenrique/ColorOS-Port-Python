@@ -747,6 +747,15 @@ class Repacker:
 
     def _run_ota_tool(self):
         """Call ota_from_target_files to generate ZIP"""
+        
+        # Check if otatools is available
+        ota_tool = self.ota_tools_dir / "bin" / "ota_from_target_files"
+        if not ota_tool.exists():
+            self.logger.error(f"ota_from_target_files not found at {ota_tool}")
+            self.logger.error("OTA tools (otatools) not found. Please install Android build tools.")
+            self.logger.info("Falling back to super.img format instead of payload.bin")
+            return
+        
         self.logger.info("Running ota_from_target_files...")
         
         # Construct output filename
