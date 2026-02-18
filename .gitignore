@@ -38,6 +38,7 @@ devices/**/*.apk
 *.img
 *.bin
 tmp/
+otatools/
 
 # Editor specific
 .idea/
