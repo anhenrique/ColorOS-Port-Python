@@ -85,11 +85,10 @@ def main():
         copied_count = 0
         for fw_img in baserom.images_dir.glob("*.img"):
             dest = repack_images_dir / fw_img.name
-            if not dest.exists():
-                import shutil
-                shutil.copy2(fw_img, dest)
-                logger.debug(f"Copied {fw_img.name} to repack_images")
-                copied_count += 1
+            import shutil
+            shutil.copy2(fw_img, dest)
+            logger.debug(f"Copied {fw_img.name} to repack_images")
+            copied_count += 1
         
         logger.info(f"Copied {copied_count} firmware images to repack_images")
         
