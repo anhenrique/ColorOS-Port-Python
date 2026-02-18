@@ -76,6 +76,10 @@ def main():
         # Base ROM needs all partitions (including firmware)
         baserom.extract_images()
         
+        # Create repack_images directory before copying
+        repack_images_dir = work_dir / "repack_images"
+        repack_images_dir.mkdir(parents=True, exist_ok=True)
+        
         # Extract baserom firmware images (boot, dtbo, etc.) to repack_images_dir
         logger.info("Extracting baserom firmware images...")
         baserom_firmware = ["boot", "dtbo", "vbmeta", "vbmeta_system", "vbmeta_vendor"]
@@ -83,12 +87,12 @@ def main():
             fw_img = baserom.images_dir / f"{fw}.img"
             if fw_img.exists():
                 import shutil
-                shutil.copy2(fw_img, work_dir / "repack_images" / fw_img.name)
+                shutil.copy2(fw_img, repack_images_dir / fw_img.name)
                 logger.info(f"Copied {fw_img.name} to repack_images")
         
         # Also extract any other .img files from baserom that might be needed
         for fw_img in baserom.images_dir.glob("*.img"):
-            dest = work_dir / "repack_images" / fw_img.name
+            dest = repack_images_dir / fw_img.name
             if not dest.exists():
                 import shutil
                 shutil.copy2(fw_img, dest)
