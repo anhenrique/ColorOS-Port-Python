@@ -3,8 +3,6 @@
         "system",
         "system_ext",
         "product",
-        "vendor",
-        "odm",
         "my_product",
         "my_engineering",
         "my_company",
@@ -22,6 +20,8 @@
         "product",
         "vendor",
         "odm",
+        "system_dlkm",
+        "vendor_dlkm",
         "my_product",
         "my_engineering",
         "my_company",
@@ -40,8 +40,10 @@
     "ddr_type": "ddr4",
     "reusabe_partition_list": [
         "odm",
-        "vendor"
+        "vendor",
+        "system_dlkm",
+        "vendor_dlkm"
     ],
-    "system_dlkm_enabled": false,
-    "vendor_dlkm_enabled": false
+    "system_dlkm_enabled": true,
+    "vendor_dlkm_enabled": true
 }
