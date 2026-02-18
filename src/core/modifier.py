@@ -111,36 +111,41 @@ class SystemModifier:
             rule_target_root = target_root / search_path
 
             if not rule_stock_root.exists():
-                self.logger.warning(f"Source path not found: {rule_stock_root}")
+                self.logger.debug(f"Source search path not found: {rule_stock_root}")
                 continue
 
             for pattern in files:
+                # Find matching items in Source (Stock ROM)
                 sources = []
                 if match_mode == "glob":
                     sources = list(rule_stock_root.glob(pattern))
                 elif match_mode == "recursive":
                     sources = list(rule_stock_root.rglob(pattern))
                 else:
+                    # exact
                     exact_file = rule_stock_root / pattern
                     if exact_file.exists():
                         sources = [exact_file]
                 
                 if not sources:
-                    self.logger.warning(f"No source items found for pattern: {pattern} in {rule_stock_root}")
+                    self.logger.debug(f"No source items found for pattern: {pattern}")
                     continue
 
                 for src_item in sources:
+                    # Calculate relative path to apply to target
                     rel_name = src_item.name
                     target_item = rule_target_root / rel_name
                     
                     found_in_target = False
                     
                     if match_mode == "recursive":
+                        # Search in target
                         candidates = list(rule_target_root.rglob(rel_name))
                         if candidates:
                             target_item = candidates[0]
                             found_in_target = True
                     else:
+                        # Exact or Glob (flat check)
                         if target_item.exists():
                             found_in_target = True
                             
@@ -149,6 +154,7 @@ class SystemModifier:
                         should_copy = True
                     elif ensure_exists:
                         should_copy = True
+                        # Try to replicate structure if recursive
                         if match_mode == "recursive":
                             try:
                                 rel = src_item.relative_to(rule_stock_root)
@@ -158,21 +164,24 @@ class SystemModifier:
                     if should_copy:
                         self.logger.info(f"  Replacing/Adding: {rel_name}")
                         
+                        # Prepare target directory
                         if not target_item.parent.exists():
                             target_item.parent.mkdir(parents=True, exist_ok=True)
                             
+                        # Remove existing target
                         if target_item.exists():
                             if target_item.is_dir():
                                 shutil.rmtree(target_item)
                             else:
                                 target_item.unlink()
                         
+                        # Copy
                         if src_item.is_dir():
                             shutil.copytree(src_item, target_item, symlinks=True, dirs_exist_ok=True)
                         else:
                             shutil.copy2(src_item, target_item)
                     else:
-                        self.logger.info(f"  Skipped: {rel_name} (not found in target, ensure_exists=False)")
+                        self.logger.debug(f"  Skipping {rel_name} (Target missing and ensure_exists=False)")
 
     def _load_replacement_config(self):
         """
