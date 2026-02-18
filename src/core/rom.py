@@ -385,24 +385,21 @@ class RomPackage:
         target_dir.mkdir(parents=True, exist_ok=True)
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
-        # 3. Detect filesystem type and extract accordingly
-        fs_type = self._detect_filesystem(img_path)
-        
+        # 3. Try erofs extraction first (most common for ColorOS/MIUI)
+        # Reference: HyperOS-Port-Python just assumes erofs
         try:
-            if fs_type == "erofs":
-                cmd = ["extract.erofs", "-x", "-i", str(img_path), "-o", str(self.extracted_dir)]
-                self.shell.run(cmd, capture_output=True)
-            elif fs_type == "ext4":
-                # Use 7z to extract ext4 images
+            cmd = ["extract.erofs", "-x", "-i", str(img_path), "-o", str(self.extracted_dir)]
+            self.shell.run(cmd, capture_output=True)
+        except Exception as e:
+            # Try ext4 as fallback
+            self.logger.debug(f"EROFS extraction failed, trying ext4: {e}")
+            try:
                 import subprocess
                 cmd = ["7z", "x", str(img_path), f"-o{self.extracted_dir}", "-y"]
                 subprocess.run(cmd, check=True)
-            else:
-                self.logger.warning(f"Unknown filesystem for {part_name}, skipping extraction.")
+            except Exception as e2:
+                self.logger.warning(f"Failed to extract {part_name}: {e2}")
                 return None
-        except Exception as e:
-            self.logger.error(f"Failed to extract {part_name}: {e}")
-            return None
 
         # 4. [Critical] Process config files (fs_config / file_contexts)
         # Move generated config files to self.config_dir for unified management

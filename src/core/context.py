@@ -200,8 +200,7 @@ class Context:
                     self.logger.error(f"Partition install failed: {e}")
                     pass
         
-        # Copy firmware images from baserom
-        self._copy_firmware_images(partition_list)
+        # Note: Firmware images are already copied in main.py before this
 
     def _copy_partition(self, partition, source_rom):
         # 1. Extract to internal source directory first (e.g. build/baserom/extracted/system)
@@ -228,31 +227,3 @@ class Context:
              
         if src_fc.exists():
              shutil.copy2(src_fc, self.target_config_dir / f"{partition}_file_contexts")
-
-    def _copy_firmware_images(self, exclude_list: list):
-        """
-        Copy firmware images from Base ROM that don't need modification.
-        Iterate .img files in baserom images/, excluding logical partitions.
-        """
-        self.logger.info("Copying firmware images from Base ROM...")
-        
-        if not self.baserom.images_dir.exists():
-            self.logger.warning("Base ROM images directory not found! Firmware copy skipped.")
-            return
-
-        copied_count = 0
-        for img_file in self.baserom.images_dir.glob("*.img"):
-            part_name = img_file.stem
-            
-            clean_name = part_name.replace("_a", "").replace("_b", "")
-            
-            if clean_name in exclude_list:
-                continue
-            
-            dest_path = self.repack_images_dir / img_file.name
-            
-            self.logger.debug(f"Copying firmware: {img_file.name}")
-            shutil.copy2(img_file, dest_path)
-            copied_count += 1
-            
-        self.logger.info(f"Copied {copied_count} firmware images to {self.repack_images_dir}")
