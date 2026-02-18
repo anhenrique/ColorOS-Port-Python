@@ -16,26 +16,6 @@
         "files": ["com.oplus.vulkanLayer"]
     },
     {
-        "description": "System Overlays",
-        "type": "file",
-        "search_path": "product",
-        "match_mode": "recursive",
-        "ensure_exists": false,
-        "files": [
-            "AospFrameworkResOverlay.apk",
-            "MiuiFrameworkResOverlay.apk",
-            "MiuiCarrierConfigOverlay.apk"
-        ]
-    },
-    {
-        "description": "Audio Effects",
-        "type": "dir",
-        "search_path": "product",
-        "match_mode": "recursive",
-        "ensure_exists": false,
-        "files": ["MiSound"]
-    },
-    {
         "description": "Biometric Services",
         "type": "dir",
         "search_path": "product/app",
@@ -66,6 +46,21 @@
         "match_mode": "exact",
         "ensure_exists": false,
         "files": ["device_info.json"]
+    },
+    {
+        "description": "my_product overlay APKs (by package name)",
+        "type": "package",
+        "search_path": "my_product/overlay",
+        "match_mode": "exact",
+        "ensure_exists": false,
+        "files": [
+            "android.frameworkres.overlay.display.product",
+            "android.frameworkres.overlay.config",
+            "android.frameworkres.overlay.aod.product",
+            "android.frameworkres.overlay.wifi.product",
+            "com.oplus.systemui.overlay",
+            "com.oplus.android.overlay"
+        ]
     },
     {
         "description": "my_product game manager config (bootloop fix)",

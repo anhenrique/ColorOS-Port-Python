@@ -578,3 +578,64 @@ class RomPackage:
         if not self.props:
             self.parse_all_props()
         return self.props.get(key, default)
+
+    def scan_apks(self) -> dict:
+        """
+        Scan all APK files in extracted directory and extract metadata.
+        Returns dict: {package_name: {'path': Path, 'version_code': int, 'version_name': str}}
+        """
+        if hasattr(self, '_apk_cache') and self._apk_cache:
+            return self._apk_cache
+        
+        self._apk_cache = {}
+        self.logger.info(f"[{self.label}] Scanning APKs...")
+        
+        if not self.extracted_dir.exists():
+            return self._apk_cache
+        
+        import subprocess
+        aapt_bin = self._find_aapt()
+        
+        for apk in self.extracted_dir.rglob("*.apk"):
+            try:
+                result = subprocess.run(
+                    [str(aapt_bin), "dump", "badging", str(apk)],
+                    capture_output=True, text=True, timeout=10
+                )
+                output = result.stdout
+                
+                package_name = None
+                version_code = None
+                version_name = None
+                
+                for line in output.split('\n'):
+                    if line.startswith("package: name='"):
+                        pkg = line.split("name='")[1].split("'")[0]
+                        package_name = pkg
+                    elif line.startswith("versionCode="):
+                        vc = line.split("versionCode=")[1].split(" ")[0]
+                        version_code = int(vc) if vc.isdigit() else None
+                    elif line.startswith("versionName="):
+                        version_name = line.split("versionName=")[1].split(" ")[0].strip("'")
+                
+                if package_name:
+                    self._apk_cache[package_name] = {
+                        'path': apk,
+                        'relative_path': apk.relative_to(self.extracted_dir),
+                        'version_code': version_code,
+                        'version_name': version_name
+                    }
+            except Exception as e:
+                self.logger.debug(f"Failed to parse {apk.name}: {e}")
+        
+        self.logger.info(f"[{self.label}] Found {len(self._apk_cache)} APKs")
+        return self._apk_cache
+    
+    def _find_aapt(self) -> Path:
+        """Find aapt binary in bin directory"""
+        bin_root = Path("bin")
+        for arch in ["linux/x86_64", "linux/arm64", "linux", "windows/x86_64", "darwin"]:
+            aapt = bin_root / arch / "aapt"
+            if aapt.exists():
+                return aapt
+        return bin_root / "aapt"

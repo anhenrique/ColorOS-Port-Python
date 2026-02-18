@@ -86,6 +86,7 @@ class SystemModifier:
     def _process_replacements(self):
         """
         Execute file/directory replacements defined in replacements.json.
+        Supports types: file, dir, package (by APK package name)
         """
         replacements = self._load_replacement_config()
         if not replacements:
@@ -106,7 +107,11 @@ class SystemModifier:
 
             self.logger.info(f"Applying rule: {desc}")
 
-            # Define search roots
+            if rtype == "package":
+                self._process_package_replacement(rule, desc, stock_root, target_root)
+                continue
+
+            # Original logic for file/dir types
             rule_stock_root = stock_root / search_path
             rule_target_root = target_root / search_path
 
@@ -115,14 +120,12 @@ class SystemModifier:
                 continue
 
             for pattern in files:
-                # Find matching items in Source (Stock ROM)
                 sources = []
                 if match_mode == "glob":
                     sources = list(rule_stock_root.glob(pattern))
                 elif match_mode == "recursive":
                     sources = list(rule_stock_root.rglob(pattern))
                 else:
-                    # exact
                     exact_file = rule_stock_root / pattern
                     if exact_file.exists():
                         sources = [exact_file]
@@ -132,20 +135,17 @@ class SystemModifier:
                     continue
 
                 for src_item in sources:
-                    # Calculate relative path to apply to target
                     rel_name = src_item.name
                     target_item = rule_target_root / rel_name
                     
                     found_in_target = False
                     
                     if match_mode == "recursive":
-                        # Search in target
                         candidates = list(rule_target_root.rglob(rel_name))
                         if candidates:
                             target_item = candidates[0]
                             found_in_target = True
                     else:
-                        # Exact or Glob (flat check)
                         if target_item.exists():
                             found_in_target = True
                             
@@ -154,7 +154,6 @@ class SystemModifier:
                         should_copy = True
                     elif ensure_exists:
                         should_copy = True
-                        # Try to replicate structure if recursive
                         if match_mode == "recursive":
                             try:
                                 rel = src_item.relative_to(rule_stock_root)
@@ -164,24 +163,64 @@ class SystemModifier:
                     if should_copy:
                         self.logger.info(f"  Replacing/Adding: {rel_name}")
                         
-                        # Prepare target directory
                         if not target_item.parent.exists():
                             target_item.parent.mkdir(parents=True, exist_ok=True)
                             
-                        # Remove existing target
                         if target_item.exists():
                             if target_item.is_dir():
                                 shutil.rmtree(target_item)
                             else:
                                 target_item.unlink()
                         
-                        # Copy
                         if src_item.is_dir():
                             shutil.copytree(src_item, target_item, symlinks=True, dirs_exist_ok=True)
                         else:
                             shutil.copy2(src_item, target_item)
                     else:
                         self.logger.debug(f"  Skipping {rel_name} (Target missing and ensure_exists=False)")
+
+    def _process_package_replacement(self, rule, desc, stock_root, target_root):
+        """Process replacements by APK package name"""
+        search_path = rule.get("search_path", "")
+        files = rule.get("files", [])
+        
+        stock_apks = self.ctx.stock.scan_apks()
+        target_apks = self.ctx.port.scan_apks()
+        
+        rule_stock_root = stock_root / search_path
+        rule_target_root = target_root / search_path
+        
+        if not rule_stock_root.exists():
+            self.logger.debug(f"Source path not found: {rule_stock_root}")
+            return
+        
+        for pkg_name in files:
+            stock_apk_info = stock_apks.get(pkg_name)
+            target_apk_info = target_apks.get(pkg_name)
+            
+            if not stock_apk_info:
+                self.logger.debug(f"Package {pkg_name} not found in stock ROM")
+                continue
+            
+            src_path = stock_apk_info['path']
+            
+            if target_apk_info:
+                dst_path = target_apk_info['path']
+                self.logger.info(f"  Replacing {pkg_name}: {dst_path.name}")
+            else:
+                dst_path = rule_target_root / src_path.name
+                self.logger.info(f"  Adding {pkg_name}: {dst_path.name}")
+            
+            if not dst_path.parent.exists():
+                dst_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            if dst_path.exists():
+                if dst_path.is_dir():
+                    shutil.rmtree(dst_path)
+                else:
+                    dst_path.unlink()
+            
+            shutil.copy2(src_path, dst_path)
 
     def _load_replacement_config(self):
         """
