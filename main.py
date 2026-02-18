@@ -67,7 +67,9 @@ def main():
     # Extract ROMs
     try:
         baserom.extract(tools)
-        portrom.extract(tools)
+        # Port ROM only needs specific partitions: system, product, system_ext, and my_*
+        portrom_partitions = ["system", "product", "system_ext", "my_*"]
+        portrom.extract(tools, partitions=portrom_partitions)
     except Exception as e:
         logger.error(f"Failed to extract ROMs: {e}")
         sys.exit(1)
@@ -100,6 +102,11 @@ def main():
     # Pass device_code to Context
     ctx = Context(config, baserom, portrom, work_dir, device_code) 
     
+    # Export build.prop for debugging
+    logger.info("Exporting build.prop for debugging...")
+    baserom.export_props(work_dir / "build_props" / "baserom_build.prop")
+    portrom.export_props(work_dir / "build_props" / "portrom_build.prop")
+
     # Stage 1: Install Partitions
     logger.info("Starting Stage 1: Partition Installation...")
     ctx.install_partitions()
