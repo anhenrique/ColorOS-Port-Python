@@ -11,8 +11,6 @@ from src.core.props import PropertyModifier
 from src.core.modifier import SystemModifier, FrameworkModifier
 from src.core.packer import Repacker
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 def parse_args():
@@ -22,7 +20,12 @@ def parse_args():
     parser.add_argument("--device_code", help="Device code for configuration override")
     parser.add_argument("--work_dir", default="build", help="Working directory")
     parser.add_argument("--pack_type", choices=["super", "payload"], default="payload", help="Output format: super (Fastboot) or payload (OTA). Default: payload")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     return parser.parse_args()
+
+def setup_logging(debug: bool = False):
+    level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(level=level, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def detect_device_code(rom_path: str, args_device_code: str | None = None) -> str | None:
     # Priority 1: User Argument
@@ -42,6 +45,9 @@ def detect_device_code(rom_path: str, args_device_code: str | None = None) -> st
 
 def main():
     args = parse_args()
+    
+    # Setup logging based on debug flag
+    setup_logging(args.debug)
     
     # 1. Initial Device Code Detection (Filename/Args)
     device_code = detect_device_code(args.baserom, args.device_code)

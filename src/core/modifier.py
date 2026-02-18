@@ -111,7 +111,7 @@ class SystemModifier:
             rule_target_root = target_root / search_path
 
             if not rule_stock_root.exists():
-                self.logger.debug(f"Source search path not found: {rule_stock_root}")
+                self.logger.debug(f"Source path not found: {rule_stock_root}")
                 continue
 
             for pattern in files:
