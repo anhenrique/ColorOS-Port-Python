@@ -542,17 +542,18 @@ class RomPackage:
             prop_files = list(self.extracted_dir.glob("*/build.prop")) + \
                          list(self.extracted_dir.glob("*/etc/build.prop"))
 
-        # 2. Sort (my_manifest -> my_product -> System -> Vendor -> Product ...)
+        # 2. Sort (System -> Vendor -> ... -> my_product -> my_manifest)
+        # Higher index means parsed LATER and thus has HIGHER priority (overwrites previous)
         def sort_priority(path):
             p = str(path).lower()
-            if "my_manifest" in p: return 0
-            if "my_product" in p: return 1
-            if "system/system" in p: return 2
-            if "system/" in p: return 3
-            if "vendor" in p: return 4
-            if "product" in p: return 5
-            if "odm" in p: return 6
-            return 99
+            if "system/system" in p: return 0
+            if "system/" in p: return 1
+            if "vendor" in p: return 2
+            if "product" in p: return 3
+            if "odm" in p: return 4
+            if "my_product" in p: return 10
+            if "my_manifest" in p: return 11
+            return 50
         
         # Remove duplicates while preserving order (using dict)
         prop_files = list(dict.fromkeys(prop_files))
