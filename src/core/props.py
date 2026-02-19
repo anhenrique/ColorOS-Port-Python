@@ -166,11 +166,17 @@ class PropertyModifier:
         bruce_prop = target_my_product / "etc" / "bruce" / "build.prop"
         my_product_prop = target_my_product / "build.prop"
         
-        # Market name/enname (Always in bruce patch)
+        # Load my_manifest props to avoid duplication
+        manifest_prop_file = self.ctx.baserom.extracted_dir / "my_manifest" / "build.prop"
+        manifest_props = self._read_prop_to_dict(manifest_prop_file)
+
+        # Market name/enname (Only if NOT in my_manifest)
         if self.ctx.base_market_name:
-            self._add_or_replace_prop(bruce_prop, "ro.vendor.oplus.market.name", self.ctx.base_market_name)
+            if "ro.vendor.oplus.market.name" not in manifest_props and "ro.oplus.market.name" not in manifest_props:
+                self._add_or_replace_prop(bruce_prop, "ro.vendor.oplus.market.name", self.ctx.base_market_name)
         if self.ctx.base_market_enname:
-            self._add_or_replace_prop(bruce_prop, "ro.vendor.oplus.market.enname", self.ctx.base_market_enname)
+            if "ro.vendor.oplus.market.enname" not in manifest_props and "ro.oplus.market.enname" not in manifest_props:
+                self._add_or_replace_prop(bruce_prop, "ro.vendor.oplus.market.enname", self.ctx.base_market_enname)
         
         # Ported by watermark (Modify the effective file)
         target_v_file = my_product_prop if my_product_prop.exists() else bruce_prop

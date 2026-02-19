@@ -856,31 +856,40 @@ class Repacker:
     def _get_super_size(self):
         """
         Get Super partition size
-        Logic ported from bin/getSuperSize.sh
+        Logic: Try matching both Device Code and Model
         """
-
-        device_code = self.ctx.stock_rom_code.upper()
+        device_code = self.ctx.stock_rom_code.upper() if self.ctx.stock_rom_code else ""
+        product_model = self.ctx.base_product_model.upper() if self.ctx.base_product_model else ""
         
-        self.logger.info(f"Determining Super partition size for device: {device_code}")
+        self.logger.info(f"Determining Super size for: Device={device_code}, Model={product_model}")
 
         size_map = {
-            # Xiaomi 13 Series / Note 12 Turbo / K60 Pro / MIX Fold 3
+            # 9GB - OP8/9 Series, early A14 devices
+            9126805504: [
+                "ONEPLUS8", "ONEPLUS8PRO", "ONEPLUS8T", "KEBAB", "INSTANTNOODLE", "INSTANTNOODLEP",
+                "ONEPLUS9", "ONEPLUS9PRO", "LEMONADE", "LEMONADEP",
+                "PKX110", "PHP110", "PHB110" # OP11/12/13 Series
+            ],
+            # 12GB - Newer flagship specs
+            12884901888: ["ONEPLUS12", "ONEPLUS13", "PJSH110"],
+            
+            # Xiaomi High-end (Approx 9GB)
             9663676416: ["FUXI", "NUWA", "ISHTAR", "MARBLE", "SOCRATES", "BABYLON"],
             
-            # Redmi Note 12 5G 
+            # Other variants
             9122611200: ["SUNSTONE"],
-            
-            # Pad 6 Max
             11811160064: ["YUDI"],
         }
 
-        for size, devices in size_map.items():
-            if device_code in devices:
-                self.logger.info(f"Matched known device {device_code}, size: {size}")
+        # Try to match device_code first, then product_model
+        for size, identifiers in size_map.items():
+            if device_code in identifiers or product_model in identifiers:
+                matched = device_code if device_code in identifiers else product_model
+                self.logger.info(f"Matched {matched}, using size: {size}")
                 return size
 
-        # Default size for other devices
+        # Default size
         default_size = 9126805504
-        self.logger.info(f"Device {device_code} not in special list, using default size: {default_size}")
+        self.logger.info(f"No specific match found, using default size: {default_size}")
         
         return default_size
