@@ -13,6 +13,32 @@ A Python-based porting tool for ColorOS, inspired by the HyperOS-Port-Python pro
     - `SmaliPatcher`: Decompiles and patches `services.jar` and `framework.jar` for signature verification and other fixes.
 - **Advanced Repacking**: Supports packing partitions as EROFS or EXT4, and generating `super.img` (including Virtual A/B support).
 
+## Hierarchical Configuration System
+
+The project uses a powerful three-layer inheritance system for ROM modifications, allowing for easy expansion and multi-device support without duplicate logic.
+
+### Inheritance Layers
+
+Modifications are loaded and merged in the following order (lower layers override higher ones):
+
+1.  **Common Layer (`devices/common/`)**: Global patches and features applied to all devices (e.g., standard GMS unlock, universal debloating).
+2.  **Chipset Layer (`devices/chipset/<FAMILY>/`)**: Chipset-specific modifications (e.g., `OPSM8250` for Snapdragon 865, `OPSM8350` for 888). Identifies via `ro.build.device_family`.
+3.  **Target Layer (`devices/target/<DEVICE>/`)**: Specific hardware patches for a single device model (e.g., `ONEPLUS9PRO`, `OP4E7L1`). Identifies via `ro.product.device` (Project ID).
+
+> **Note**: Directory names for Chipset and Target layers must be in **ALL CAPS**.
+
+### Configuration Files
+
+-   **`features.json`**: Controls system features (oplus-features, app-features), build.prop modifications, and feature removals.
+    -   `oplus_feature`: Adds entries to `com.oplus.oplus-feature-ext.xml`.
+    -   `app_feature`: Adds entries to `com.oplus.app-features-ext.xml`.
+    -   `build_props`: Key-value pairs to be injected into specific partition's `build.prop`.
+    -   `features_remove`: List of features to be stripped from the Port ROM.
+-   **`replacements.json`**: Handles file system operations.
+    -   `type: "unzip_override"`: Extracts a ZIP over the ROM with optional conditional logic and file removals.
+    -   `condition_android_version`: Executes rules only for specific Android versions (e.g., `13`, `14`).
+    -   `condition_file_exists`: Executes rules only if a certain file is present in the source.
+
 ## Usage
 
 ```bash
