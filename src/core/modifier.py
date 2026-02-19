@@ -351,10 +351,13 @@ class SystemModifier:
 
     def _get_package_name(self, apk_path):
         try:
+            # Use self.shell.run to handle binary pathing and LD_LIBRARY_PATH
             # aapt2 dump packagename <apk>
             # Output: package: name='com.android.chrome'
-            cmd = [str(self.ctx.tools.aapt2), "dump", "packagename", str(apk_path)]
-            result = self.shell.run(cmd, capture_output=True, check=False)
+            result = self.shell.run(
+                ["aapt2", "dump", "packagename", str(apk_path)],
+                capture_output=True, check=False
+            )
             if result.returncode == 0:
                 output = result.stdout.strip()
                 # Parse "package: name='com.foo.bar'"
