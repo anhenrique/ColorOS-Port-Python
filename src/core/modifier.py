@@ -105,6 +105,11 @@ class SystemModifier:
 
             # --- Advanced Conditions ---
             
+            # ROM Type Conditions
+            if rule.get("condition_port_is_coloros") and not self.ctx.portIsColorOS: continue
+            if rule.get("condition_port_is_coloros_global") and not self.ctx.portIsColorOSGlobal: continue
+            if rule.get("condition_port_is_oos") and not self.ctx.portIsOOS: continue
+
             # Port Android Version (e.g., 16)
             cond_port_v = rule.get("condition_port_android_version")
             if cond_port_v and int(self.ctx.port_android_version) != cond_port_v:
@@ -195,7 +200,7 @@ class SystemModifier:
 
     def _execute_unzip_override(self, rule):
         source_zip = Path(rule["source"])
-        target_base_dir = self.ctx.work_dir / rule.get("target_base_dir", "") # Default to work_dir if not specified
+        target_base_dir = self.ctx.work_dir / rule.get("target_base_dir", "") 
 
         if not source_zip.exists():
             self.logger.warning(f"Override ZIP not found: {source_zip}, skipping.")
@@ -210,41 +215,44 @@ class SystemModifier:
             self.logger.error(f"  Failed to extract {source_zip.name}: {e}")
             return
         
-        # Process removals AFTER unzip to ensure any new files from zip are also handled if conflicting
+        # Process removals AFTER unzip
         removes = rule.get("removes", [])
         if removes:
-            self.logger.info(f"  Removing {len(removes)} files/dirs after unzip...")
-            # Resolve removes paths relative to the effective target_base_dir
-            effective_base_dir_for_removes = target_base_dir # Already resolved as self.ctx.work_dir / target_base_dir
-            for item_to_remove in removes:
-                full_path = effective_base_dir_for_removes / item_to_remove
-                if full_path.exists():
-                    if full_path.is_dir():
-                        shutil.rmtree(full_path)
-                        self.logger.debug(f"    Removed directory: {full_path}")
-                    else:
-                        full_path.unlink()
-                        self.logger.debug(f"    Removed file: {full_path}")
-                else:
-                    self.logger.debug(f"    Item not found for removal (after unzip): {full_path}")
+            self.logger.info(f"  Removing {len(removes)} patterns after unzip...")
+            effective_base_dir_for_removes = target_base_dir
+            for pattern in removes:
+                # Support glob patterns
+                matched = list(effective_base_dir_for_removes.glob(pattern)) if "*" in str(pattern) else [effective_base_dir_for_removes / pattern]
+                for full_path in matched:
+                    if full_path.exists():
+                        if full_path.is_dir():
+                            shutil.rmtree(full_path)
+                            self.logger.debug(f"    Removed directory: {full_path}")
+                        else:
+                            full_path.unlink()
+                            self.logger.debug(f"    Removed file: {full_path}")
+
+        # Process build_props in rule
+        rule_props = rule.get("build_props")
+        if rule_props:
+            self._apply_build_props(rule_props)
 
     def _execute_remove_files(self, rule):
         files_to_remove = rule.get("files", [])
         if files_to_remove:
-            self.logger.info(f"  Removing {len(files_to_remove)} specified files/dirs...")
-            # Resolve removes paths relative to the effective target_base_dir or work_dir
+            self.logger.info(f"  Removing {len(files_to_remove)} specified patterns...")
             effective_base_dir_for_removes = self.ctx.work_dir / rule.get("target_base_dir", "")
-            for item_to_remove in files_to_remove:
-                full_path = effective_base_dir_for_removes / item_to_remove
-                if full_path.exists():
-                    if full_path.is_dir():
-                        shutil.rmtree(full_path)
-                        self.logger.debug(f"    Removed directory: {full_path}")
-                    else:
-                        full_path.unlink()
-                        self.logger.debug(f"    Removed file: {full_path}")
-                else:
-                    self.logger.debug(f"    Item not found for removal: {full_path}")
+            for pattern in files_to_remove:
+                # Support glob patterns
+                matched = list(effective_base_dir_for_removes.glob(pattern)) if "*" in str(pattern) else [effective_base_dir_for_removes / pattern]
+                for full_path in matched:
+                    if full_path.exists():
+                        if full_path.is_dir():
+                            shutil.rmtree(full_path)
+                            self.logger.debug(f"    Removed directory: {full_path}")
+                        else:
+                            full_path.unlink()
+                            self.logger.debug(f"    Removed file: {full_path}")
 
     def _build_target_index(self, root: Path):
         """Build a cache of all files and directories in the target root for faster lookup"""

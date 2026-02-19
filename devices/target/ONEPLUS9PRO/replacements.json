@@ -1,0 +1,104 @@
+{
+    "replacements": [
+        {
+            "description": "ColorOS 15 Camera Fix (CN)",
+            "type": "unzip_override_group",
+            "condition_port_is_coloros": true,
+            "condition_port_android_version": 15,
+            "condition_file_exists": "devices/target/ONEPLUS9PRO/camera5.0-fix_cos.zip",
+            "operations": [
+                {
+                    "type": "unzip_override",
+                    "source": "devices/target/ONEPLUS9PRO/camera5.0-fix_cos.zip",
+                    "target_base_dir": "build/target/",
+                    "removes": [
+                        "my_product/app/OplusCamera",
+                        "my_product/product_overlay/framework/com.oplus.camera.*.jar"
+                    ],
+                    "build_props": {
+                        "my_product": {
+                            "ro.vendor.oplus.camera.isSupportLumo": "1"
+                        }
+                    }
+                },
+                {
+                    "type": "unzip_override",
+                    "source": "devices/target/ONEPLUS9PRO/camera5.0-fix_odm.zip",
+                    "target_base_dir": "build/target/"
+                }
+            ]
+        },
+        {
+            "description": "ColorOS 16 Camera Fix (CN)",
+            "type": "unzip_override_group",
+            "condition_port_is_coloros": true,
+            "condition_port_android_version": 16,
+            "condition_file_exists": "devices/target/ONEPLUS9PRO/camera6.0-fix_odm.zip",
+            "operations": [
+                {
+                    "type": "remove_files",
+                    "target_base_dir": "build/target/",
+                    "files": [
+                        "my_product/app/OplusCamera",
+                        "my_product/product_overlay/framework/com.oplus.camera.*.jar"
+                    ]
+                },
+                {
+                    "type": "unzip_override",
+                    "source": "devices/common/camera6.0-fix_cos.zip",
+                    "target_base_dir": "build/target/",
+                    "build_props": {
+                        "my_product": {
+                            "ro.vendor.oplus.camera.isSupportLumo": "1"
+                        }
+                    }
+                },
+                {
+                    "type": "unzip_override",
+                    "source": "devices/target/ONEPLUS9PRO/camera6.0-fix_odm.zip",
+                    "target_base_dir": "build/target/"
+                }
+            ]
+        },
+        {
+            "description": "OxygenOS 15 Camera Fix",
+            "type": "unzip_override_group",
+            "condition_port_is_oos": true,
+            "condition_port_android_version": 15,
+            "condition_file_exists": "devices/target/ONEPLUS9PRO/camera5.0-fix_oos.zip",
+            "operations": [
+                {
+                    "type": "unzip_override",
+                    "source": "devices/target/ONEPLUS9PRO/camera5.0-fix_oos.zip",
+                    "target_base_dir": "build/target/",
+                    "removes": [
+                        "my_product/app/OplusCamera",
+                        "my_product/product_overlay/framework/com.oplus.camera.*.jar"
+                    ],
+                    "build_props": {
+                        "my_product": {
+                            "ro.vendor.oplus.camera.isSupportLumo": "1"
+                        }
+                    }
+                },
+                {
+                    "type": "unzip_override",
+                    "source": "devices/target/ONEPLUS9PRO/camera5.0-fix_odm.zip",
+                    "target_base_dir": "build/target/"
+                }
+            ]
+        },
+        {
+            "description": "Live Photo Support (Legacy Ports)",
+            "type": "unzip_override",
+            "source": "devices/target/ONEPLUS9PRO/live_photo_adds.zip",
+            "target_base_dir": "build/target/",
+            "condition_port_is_coloros": true,
+            "condition_base_android_version_lt": 15,
+            "removes": [
+                "my_product/app/OplusCamera",
+                "my_product/product_overlay/framework/com.oplus.camera.*.jar"
+            ]
+        }
+    ]
+}

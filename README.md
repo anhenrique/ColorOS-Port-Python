@@ -36,12 +36,17 @@ Modifications are loaded and merged in the following order (lower layers overrid
     -   `features_remove`: List of features to be stripped from the Port ROM.
 -   **`replacements.json`**: Handles file system operations.
     -   `type: "unzip_override"`: Extracts a ZIP over the ROM with optional conditional logic and file removals.
-    -   `condition_android_version`: Executes rules only for specific Android versions (e.g., `13`, `14`).
-    -   `condition_file_exists`: Executes rules only if a certain file is present in the source.
-
-## Usage
-
-```bash
+        - `condition_android_version`: Executes rules only for specific Base Android versions (e.g., `13`, `14`).
+        - `condition_port_android_version`: Executes rules for specific Port ROM Android versions (e.g., `15`, `16`).
+        - `condition_base_android_version_lt`: Executes if Base Android version is less than X.
+        - `condition_port_is_coloros`, `condition_port_is_oos`, `condition_port_is_coloros_global`: Boolean flags to target specific ROM types.
+        - `condition_regionmark`: Matches `ro.vendor.oplus.regionmark` (e.g., `"CN"`).
+        - `condition_file_exists`: Executes only if the specified local file (relative to project root) exists.
+    -   **Wildcard Support**: `removes` and `files` arrays support standard glob patterns (e.g., `my_product/overlay/aon*.apk`).
+    
+    ## Usage
+    
+    ```bash
 # Basic usage (auto-detects device code from filename)
 python3 main.py --baserom <path_to_base_rom.zip> --portrom <path_to_port_rom.zip>
 
