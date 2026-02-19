@@ -102,7 +102,7 @@ class ShellRunner:
 
     def run(self, cmd: Union[str, List[str]], cwd: Optional[Path] = None, 
             check: bool = True, capture_output: bool = False, 
-            env: Optional[dict] = None) -> subprocess.CompletedProcess:
+            env: Optional[dict] = None, silent: bool = False) -> subprocess.CompletedProcess:
         if isinstance(cmd, list):
             tool = cmd[0]
             tool_path = self.get_binary_path(tool)
@@ -116,7 +116,8 @@ class ShellRunner:
             run_env.update(env)
             
         cmd_str = " ".join(cmd) if isinstance(cmd, list) else cmd
-        self.logger.debug(f"Running: {cmd_str}")
+        if not silent:
+            self.logger.debug(f"Running: {cmd_str}")
 
         try:
             result = subprocess.run(

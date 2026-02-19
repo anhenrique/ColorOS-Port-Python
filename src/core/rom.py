@@ -645,9 +645,10 @@ class RomPackage:
             try:
                 # Use self.shell.run to handle binary pathing and LD_LIBRARY_PATH
                 # Use aapt2 as it is more modern and available in the project
+                # Set silent=True to avoid flooding debug log with every APK command
                 result = self.shell.run(
                     ["aapt2", "dump", "badging", str(apk)],
-                    capture_output=True, check=False
+                    capture_output=True, check=False, silent=True
                 )
                 
                 if result.returncode != 0:
@@ -692,7 +693,42 @@ class RomPackage:
                     self._apk_cache[pkg_name] = info
         
         self.logger.info(f"[{self.label}] Found {len(self._apk_cache)} APKs")
+        
+        # Save results to file for manual inspection/debugging
+        self._save_apk_scan_results()
+        
         return self._apk_cache
+
+    def _save_apk_scan_results(self):
+        """Save APK scan cache to a JSON file for user inspection"""
+        import json
+        
+        if not self._apk_cache:
+            return
+            
+        # Save to build directory instead of extracted config
+        project_root = Path(__file__).resolve().parent.parent.parent
+        output_dir = project_root / "build"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        output_file = output_dir / f"apk_scan_{self.label.lower()}.json"
+        
+        serializable = {}
+        # Path objects are not JSON serializable, convert to strings
+        for pkg, info in sorted(self._apk_cache.items()):
+            serializable[pkg] = {
+                'path': str(info['path']),
+                'relative_path': str(info['relative_path']),
+                'version_code': info['version_code'],
+                'version_name': info['version_name']
+            }
+            
+        try:
+            with open(output_file, 'w', encoding='utf-8') as f:
+                json.dump(serializable, f, indent=4, ensure_ascii=False)
+            self.logger.info(f"[{self.label}] APK scan results saved to: {output_file}")
+        except Exception as e:
+            self.logger.warning(f"[{self.label}] Failed to save APK scan results: {e}")
 
     def _find_aapt(self) -> Path:
         """Find aapt binary in bin directory (Deprecated: use self.shell.run)"""

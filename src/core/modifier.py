@@ -97,12 +97,58 @@ class SystemModifier:
             index[name].append(item)
         return index
 
+    def _deep_merge(self, base: dict | list, extra: dict | list):
+        """Recursively merges extra into base."""
+        if isinstance(base, dict) and isinstance(extra, dict):
+            for key, value in extra.items():
+                if key in base and isinstance(base[key], (dict, list)) and isinstance(value, (dict, list)):
+                    self._deep_merge(base[key], value)
+                else:
+                    base[key] = value
+        elif isinstance(base, list) and isinstance(extra, list):
+            # For lists, we append new items if they are not already there (simple de-duplication)
+            for item in extra:
+                if item not in base:
+                    base.append(item)
+        return base
+
+    def _load_merged_config(self, filename: str):
+        """Load and merge config from Common -> Chipset -> Target layers"""
+        config = {}
+        
+        # 1. Common Layer
+        paths = [Path("devices/common") / filename]
+        
+        # 2. Chipset Layer (e.g., devices/chipset/OPSM8250)
+        if hasattr(self.ctx, "base_chipset_family") and self.ctx.base_chipset_family != "unknown":
+            paths.append(Path(f"devices/chipset/{self.ctx.base_chipset_family}") / filename)
+        
+        # 3. Target Layer (e.g., devices/target/OP60F5L1)
+        if hasattr(self.ctx, "base_device_code") and self.ctx.base_device_code:
+            device_id = self.ctx.base_device_code.upper()
+            paths.append(Path(f"devices/target/{device_id}") / filename)
+
+        for p in paths:
+            if p.exists():
+                try:
+                    with open(p, 'r') as f:
+                        data = json.load(f)
+                        if not config:
+                            config = data
+                        else:
+                            self._deep_merge(config, data)
+                    self.logger.info(f"Loaded and merged config from {p}")
+                except Exception as e:
+                    self.logger.error(f"Failed to load config {p}: {e}")
+        
+        return config
+
     def _process_replacements(self):
         """
         Execute file/directory replacements defined in replacements.json.
         Supports types: file, dir, package (by APK package name)
         """
-        replacements = self._load_replacement_config()
+        replacements = self._load_merged_config("replacements.json")
         if not replacements:
             return
 
@@ -132,8 +178,16 @@ class SystemModifier:
 
         copy_tasks = []
 
-        for rule in replacements:
+        if isinstance(replacements, dict):
+            # If the json is a dict with a list inside, or just list
+            rules = replacements.get("replacements", []) if isinstance(replacements, dict) else replacements
+        else:
+            rules = replacements
+
+        for rule in rules:
             desc = rule.get("description", "Unknown Rule")
+            # ... (rest of the processing logic remains the same)
+
             rtype = rule.get("type", "file")
             search_path = rule.get("search_path", "")
             match_mode = rule.get("match_mode", "exact")
@@ -261,40 +315,6 @@ class SystemModifier:
             
             shutil.copy2(src_path, dst_path)
 
-
-    def _load_replacement_config(self):
-        """
-        Load replacements.json from common and device folder.
-        Strategy: Append (Common + Device)
-        """
-        replacements = []
-        
-        # 1. Common
-        common_cfg = Path("devices/common/replacements.json")
-        if common_cfg.exists():
-            try:
-                with open(common_cfg, 'r') as f:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        replacements.extend(data)
-                        self.logger.info("Loaded common replacements.")
-            except Exception as e:
-                self.logger.error(f"Failed to load common replacements: {e}")
-
-        # 2. Device (Append)
-        device_cfg = Path(f"devices/{self.ctx.stock_rom_code}/replacements.json")
-        if device_cfg.exists():
-            try:
-                with open(device_cfg, 'r') as f:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        replacements.extend(data)
-                        self.logger.info(f"Loaded device replacements for {self.ctx.stock_rom_code}.")
-            except Exception as e:
-                self.logger.error(f"Failed to load device replacements: {e}")
-        
-        return replacements
-
     def _apply_eu_localization(self):
         bundle_path = Path(self.ctx.eu_bundle)
         if not bundle_path.exists():
@@ -369,12 +389,12 @@ class SystemModifier:
 
     def _unlock_device_features(self):
         """
-        Unlock device features based on JSON configuration (Common + Device specific)
+        Unlock device features based on JSON configuration (Common + Chipset + Target)
         """
         self.logger.info("Unlocking device features (AOD, AI Display, MEMC)...")
         
-        # 1. Load Configuration
-        config = self._load_feature_config()
+        # 1. Load Hierarchical Configuration
+        config = self._load_merged_config("features.json")
         if not config:
             return
 
@@ -394,15 +414,10 @@ class SystemModifier:
         
         if enable_eu_loc:
             self.logger.info("Enabling EU Localization properties...")
-            eu_cfg_path = Path("devices/common/eu_localization.json")
-            if eu_cfg_path.exists():
-                try:
-                    with open(eu_cfg_path, 'r') as f:
-                        eu_config = json.load(f)
-                    eu_props = eu_config.get("build_props", {})
-                    self._apply_build_props(eu_props)
-                except Exception as e:
-                    self.logger.error(f"Failed to apply EU localization props: {e}")
+            eu_cfg = self._load_merged_config("eu_localization.json")
+            if eu_cfg:
+                eu_props = eu_cfg.get("build_props", {})
+                self._apply_build_props(eu_props)
 
     def _apply_coloros_features(self):
         """
@@ -411,8 +426,8 @@ class SystemModifier:
         """
         self.logger.info("Applying ColorOS XML features...")
         
-        # Load ColorOS features config
-        config = self._load_coloros_feature_config()
+        # Load ColorOS features config using hierarchical merge
+        config = self._load_merged_config("features.json")
         if not config:
             self.logger.info("No ColorOS features config found, skipping.")
             return
@@ -436,113 +451,6 @@ class SystemModifier:
         props_add = config.get("props_add", {})
         if props_add:
             self._apply_build_props(props_add)
-
-    def _load_coloros_feature_config(self):
-        """Load ColorOS features from JSON config"""
-        config = {}
-        
-        # Load Common Config
-        common_cfg = Path("devices/common/features.json")
-        if common_cfg.exists():
-            try:
-                with open(common_cfg, 'r') as f:
-                    config = json.load(f)
-            except Exception as e:
-                self.logger.error(f"Failed to load ColorOS features: {e}")
-        
-        # Load Device Config (Override)
-        device_cfg = Path(f"devices/{self.ctx.stock_rom_code}/features.json")
-        if device_cfg.exists():
-            try:
-                with open(device_cfg, 'r') as f:
-                    device_config = json.load(f)
-                
-                # Deep merge
-                for key, value in device_config.items():
-                    if isinstance(value, dict) and key in config:
-                        config[key].update(value)
-                    elif isinstance(value, list) and key in config:
-                        config[key].extend(value)
-                    else:
-                        config[key] = value
-            except Exception as e:
-                self.logger.error(f"Failed to load device ColorOS features: {e}")
-        
-        return config
-
-    def _apply_coloros_xml_features(self, features: list, feature_type: str):
-        """Apply ColorOS XML features - port.sh add_feature_v2 logic"""
-        if not features:
-            return
-        
-        # Determine target directory and file based on feature type
-        target_dir = self.ctx.target_dir / "my_product" / "etc"
-        
-        if feature_type == "oplus_feature":
-            xml_dir = target_dir / "extension"
-            base_file = "com.oplus.oplus-feature"
-            root_tag = "oplus-config"
-            node_tag = "oplus-feature"
-        elif feature_type == "app_feature":
-            xml_dir = target_dir / "extension"
-            base_file = "com.oplus.app-features"
-            root_tag = "extend_features"
-            node_tag = "app_feature"
-        elif feature_type == "permission_feature":
-            xml_dir = target_dir / "permissions"
-            base_file = "com.oplus.android-features"
-            root_tag = "permissions"
-            node_tag = "feature"
-        elif feature_type == "permission_oplus_feature":
-            xml_dir = target_dir / "permissions"
-            base_file = "oplus.feature-android"
-            root_tag = "oplus-config"
-            node_tag = "oplus-feature"
-        else:
-            return
-        
-        xml_dir.mkdir(parents=True, exist_ok=True)
-        output_file = xml_dir / f"{base_file}-ext.xml"
-        
-        # Create file if not exists
-        if not output_file.exists():
-            content = f'<?xml version="1.0" encoding="UTF-8"?>\n<{root_tag}>\n</{root_tag}>\n'
-            output_file.write_text(content, encoding='utf-8')
-        
-        # Read existing content
-        content = output_file.read_text(encoding='utf-8')
-        
-        for entry in features:
-            # Parse entry: "feature^comment^args" or just "feature"
-            parts = entry.split('^')
-            feature = parts[0].strip()
-            comment = parts[1].strip() if len(parts) > 1 and parts[1] else ""
-            extra = parts[2].strip() if len(parts) > 2 else ""
-            
-            # Check if feature already exists in any XML
-            exists = self._check_feature_exists(feature)
-            if exists:
-                self.logger.info(f"Feature {feature} already exists, skipping.")
-                continue
-            
-            # Add feature
-            self.logger.info(f"Adding feature: {feature}")
-            
-            # Build attribute string
-            attrs = f'name="{feature}"'
-            if extra and feature_type == "app_feature":
-                attrs = f'{attrs} {extra}'
-            elif extra:
-                attrs = f'{attrs} {extra}'
-            
-            # Add comment before feature
-            if comment:
-                comment_line = f"    <!-- {comment} -->\n"
-                content = content.replace(f"</{root_tag}>", comment_line + f"    <{node_tag} {attrs}/>\n</{root_tag}>")
-            else:
-                content = content.replace(f"</{root_tag}>", f"    <{node_tag} {attrs}/>\n</{root_tag}>")
-        
-        output_file.write_text(content, encoding='utf-8')
 
     def _check_feature_exists(self, feature: str) -> bool:
         """Check if feature already exists in any XML file"""
@@ -766,38 +674,6 @@ class SystemModifier:
                             self.logger.info(f"Removed feature {feature} from {xml_file.name}")
                     except Exception:
                         pass
-
-    def _load_feature_config(self):
-        config = {}
-        
-        # Load Common Config
-        common_cfg = Path("devices/common/features.json")
-        if common_cfg.exists():
-            try:
-                with open(common_cfg, 'r') as f:
-                    config = json.load(f)
-                self.logger.info("Loaded common features config.")
-            except Exception as e:
-                self.logger.error(f"Failed to load common features: {e}")
-
-        # Load Device Config (Override)
-        device_cfg = Path(f"devices/{self.ctx.stock_rom_code}/features.json")
-        if device_cfg.exists():
-            try:
-                with open(device_cfg, 'r') as f:
-                    device_config = json.load(f)
-                
-                # Deep merge logic
-                for key, value in device_config.items():
-                    if isinstance(value, dict) and key in config:
-                        config[key].update(value)
-                    else:
-                        config[key] = value
-                self.logger.info(f"Loaded device features config for {self.ctx.stock_rom_code}.")
-            except Exception as e:
-                self.logger.error(f"Failed to load device features: {e}")
-        
-        return config
 
     def _apply_xml_features(self, features):
         feat_dir = self.ctx.target_dir / "product/etc/device_features"

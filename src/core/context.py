@@ -34,12 +34,14 @@ class Context:
         self.base_market_name = None
         self.base_market_enname = None
         self.base_regionmark = None
+        self.base_chipset_family = "unknown"
         self.base_rom_density = "480"
         self.base_vendor_brand = None
         self.base_my_product_type = None
         
         self.port_android_version = None
         self.port_android_sdk = None
+        self.port_chipset_family = "unknown"
         self.port_device_code = None
         self.port_product_device = None
         self.port_product_name = None
@@ -85,14 +87,22 @@ class Context:
         self.base_android_version = baserom.get_prop("ro.build.version.release")
         self.base_android_sdk = baserom.get_prop("ro.system.build.version.sdk")
         
-        base_device_code = baserom.get_prop("ro.oplus.version.my_manifest")
-        if base_device_code:
-            self.base_device_code = base_device_code.split('_')[0]
-        
         self.base_product_device = baserom.get_prop("ro.product.device")
         self.base_product_name = baserom.get_prop("ro.product.name")
         self.base_product_model = baserom.get_prop("ro.product.model")
+        
+        base_device_code = baserom.get_prop("ro.oplus.version.my_manifest")
+        if base_device_code:
+            self.base_device_code = base_device_code.split('_')[0].upper()
+        else:
+            self.base_device_code = self.base_product_device.upper() if self.base_product_device else "UNKNOWN"
+        
         self.base_vendor_brand = baserom.get_prop("ro.product.vendor.brand")
+        
+        # Extract Chipset Family (e.g., OPSM8250)
+        self.base_chipset_family = baserom.get_prop("ro.build.device_family")
+        if not self.base_chipset_family:
+            self.base_chipset_family = "unknown"
         
         self.base_market_name = baserom.get_prop("ro.vendor.oplus.market.name")
         if not self.base_market_name:
@@ -112,6 +122,8 @@ class Context:
         # === Port ROM Properties ===
         self.port_android_version = portrom.get_prop("ro.build.version.release")
         self.port_android_sdk = portrom.get_prop("ro.system.build.version.sdk")
+        
+        self.port_chipset_family = portrom.get_prop("ro.build.device_family")
         
         port_device_code = portrom.get_prop("ro.oplus.version.my_manifest")
         if port_device_code:
