@@ -644,8 +644,9 @@ class RomPackage:
         def _parse_apk(apk):
             try:
                 # Use self.shell.run to handle binary pathing and LD_LIBRARY_PATH
+                # Use aapt2 as it is more modern and available in the project
                 result = self.shell.run(
-                    ["aapt", "dump", "badging", str(apk)],
+                    ["aapt2", "dump", "badging", str(apk)],
                     capture_output=True, check=False
                 )
                 
@@ -660,14 +661,17 @@ class RomPackage:
                 
                 for line in output.split('\n'):
                     if line.startswith("package: name='"):
+                        # Format: package: name='com.foo' versionCode='123' versionName='1.0' ...
                         pkg = line.split("name='")[1].split("'")[0]
                         package_name = pkg
-                    elif "versionCode='" in line:
-                         # aapt dump badging format: package: name='...' versionCode='...' ...
-                         vc = line.split("versionCode='")[1].split("'")[0]
-                         version_code = int(vc) if vc.isdigit() else None
-                    elif "versionName='" in line:
-                         version_name = line.split("versionName='")[1].split("'")[0]
+                        
+                        if "versionCode='" in line:
+                            vc = line.split("versionCode='")[1].split("'")[0]
+                            version_code = int(vc) if vc.isdigit() else None
+                            
+                        if "versionName='" in line:
+                            version_name = line.split("versionName='")[1].split("'")[0]
+                        break # Optimization: package info is usually on first line
                 
                 if package_name:
                     return package_name, {
