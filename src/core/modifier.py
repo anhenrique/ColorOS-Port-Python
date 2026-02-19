@@ -62,6 +62,7 @@ class SystemModifier:
         
         # Order matters!
         self._process_replacements()
+        self._apply_override_zips() # New call for conditional ZIP/file ops
         # Unlock features AFTER config migration, otherwise changes to XMLs are lost
         self._unlock_device_features()
         
@@ -82,6 +83,111 @@ class SystemModifier:
             self._apply_eu_localization()
 
         self.logger.info("System Modification Completed.")
+
+    def _apply_override_zips(self):
+        """
+        Applies ZIP overrides and file removals based on replacements.json,
+        supporting conditional execution (e.g., based on Android version or chipset).
+        """
+        rules_config = self._load_merged_config("replacements.json")
+        if not rules_config:
+            return
+
+        override_rules = rules_config.get("replacements", [])
+        if not override_rules:
+            return
+        
+        self.logger.info("Applying ZIP overrides and file removals...")
+
+        for rule in override_rules:
+            rule_type = rule.get("type")
+            description = rule.get("description", "Unnamed override")
+
+            # Check for top-level Android version condition
+            condition_android_version = rule.get("condition_android_version")
+            if condition_android_version and int(self.ctx.base_android_version) != condition_android_version:
+                self.logger.debug(f"Skipping '{description}' (Android version mismatch: {self.ctx.base_android_version} != {condition_android_version})")
+                continue
+
+            # Check for top-level Chipset condition (if needed, currently handled by file location)
+            # This would only be for a 'common' replacements.json with rules for specific chipsets.
+            # For now, we rely on the file being in devices/chipset/<CHIPSET>/.
+
+            if rule_type == "unzip_override":
+                self._execute_unzip_override(rule)
+            elif rule_type == "remove_files":
+                self._execute_remove_files(rule)
+            elif rule_type == "unzip_override_group":
+                self.logger.info(f"Processing override group: {description}")
+                for op in rule.get("operations", []):
+                    op_type = op.get("type")
+                    op_description = op.get("description", "Unnamed operation in group")
+
+                    # Check for nested condition_file_exists
+                    condition_file_exists = op.get("condition_file_exists")
+                    if condition_file_exists:
+                        if not Path(condition_file_exists).exists():
+                            self.logger.debug(f"Skipping '{op_description}' (Condition file not found: {condition_file_exists})")
+                            continue
+                    
+                    if op_type == "unzip_override":
+                        self._execute_unzip_override(op)
+                    elif op_type == "remove_files":
+                        self._execute_remove_files(op)
+                    else:
+                        self.logger.warning(f"Unknown operation type in group: {op_type}")
+            else:
+                self.logger.debug(f"Skipping unknown override rule type: {rule_type}")
+
+
+    def _execute_unzip_override(self, rule):
+        source_zip = Path(rule["source"])
+        target_base_dir = self.ctx.work_dir / rule.get("target_base_dir", "") # Default to work_dir if not specified
+
+        if not source_zip.exists():
+            self.logger.warning(f"Override ZIP not found: {source_zip}, skipping.")
+            return
+
+        self.logger.info(f"  Unzipping '{source_zip.name}' to '{target_base_dir}'")
+        try:
+            with zipfile.ZipFile(source_zip, 'r') as z:
+                z.extractall(target_base_dir)
+            self.logger.info(f"  Successfully extracted {source_zip.name}")
+        except Exception as e:
+            self.logger.error(f"  Failed to extract {source_zip.name}: {e}")
+            return
+        
+        # Process removals AFTER unzip to ensure any new files from zip are also handled if conflicting
+        removes = rule.get("removes", [])
+        if removes:
+            self.logger.info(f"  Removing {len(removes)} files/dirs after unzip...")
+            for item_to_remove in removes:
+                full_path = self.ctx.work_dir / item_to_remove # Assume paths are relative to work_dir
+                if full_path.exists():
+                    if full_path.is_dir():
+                        shutil.rmtree(full_path)
+                        self.logger.debug(f"    Removed directory: {full_path}")
+                    else:
+                        full_path.unlink()
+                        self.logger.debug(f"    Removed file: {full_path}")
+                else:
+                    self.logger.debug(f"    Item not found for removal (after unzip): {full_path}")
+
+    def _execute_remove_files(self, rule):
+        files_to_remove = rule.get("files", [])
+        if files_to_remove:
+            self.logger.info(f"  Removing {len(files_to_remove)} specified files/dirs...")
+            for item_to_remove in files_to_remove:
+                full_path = self.ctx.work_dir / item_to_remove
+                if full_path.exists():
+                    if full_path.is_dir():
+                        shutil.rmtree(full_path)
+                        self.logger.debug(f"    Removed directory: {full_path}")
+                    else:
+                        full_path.unlink()
+                        self.logger.debug(f"    Removed file: {full_path}")
+                else:
+                    self.logger.debug(f"    Item not found for removal: {full_path}")
 
     def _build_target_index(self, root: Path):
         """Build a cache of all files and directories in the target root for faster lookup"""

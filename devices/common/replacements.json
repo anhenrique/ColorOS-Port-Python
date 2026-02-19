@@ -1,145 +1,78 @@
-[
-    {
-        "description": "GPU Drivers from Stock ROM",
-        "type": "dir",
-        "search_path": "product/app",
-        "match_mode": "glob",
-        "ensure_exists": true,
-        "files": ["com.oplus.gpudrivers.*"]
-    },
-    {
-        "description": "Vulkan Layer from Stock ROM",
-        "type": "dir",
-        "search_path": "product/app",
-        "match_mode": "exact",
-        "ensure_exists": true,
-        "files": ["com.oplus.vulkanLayer"]
-    },
-    {
-        "description": "Biometric Services",
-        "type": "dir",
-        "search_path": "product/app",
-        "match_mode": "glob",
-        "ensure_exists": true,
-        "files": ["*Biometric*"]
-    },
-    {
-        "description": "Product displayconfig (display_id*.xml)",
-        "type": "file",
-        "search_path": "product/etc/displayconfig",
-        "match_mode": "glob",
-        "ensure_exists": true,
-        "files": ["display_id*.xml"]
-    },
-    {
-        "description": "Product device_features directory",
-        "type": "dir",
-        "search_path": "product/etc/device_features",
-        "match_mode": "exact",
-        "ensure_exists": true,
-        "files": ["*"]
-    },
-    {
-        "description": "Product device_info.json",
-        "type": "file",
-        "search_path": "product/etc",
-        "match_mode": "exact",
-        "ensure_exists": false,
-        "files": ["device_info.json"]
-    },
-    {
-        "description": "my_product overlay APKs (by package name)",
-        "type": "package",
-        "search_path": "my_product/overlay",
-        "match_mode": "exact",
-        "ensure_exists": false,
-        "files": [
-            "android.frameworkres.overlay.display.product",
-            "android.frameworkres.overlay.config",
-            "android.frameworkres.overlay.aod.product",
-            "android.frameworkres.overlay.wifi.product",
-            "com.oplus.systemui.overlay",
-            "com.oplus.android.overlay"
-        ]
-    },
-    {
-        "description": "my_product game manager config (bootloop fix)",
-        "type": "file",
-        "search_path": "my_product/etc/extension",
-        "match_mode": "exact",
-        "ensure_exists": true,
-        "files": ["sys_game_manager_config.json"]
-    },
-    {
-        "description": "my_product graphic enhancement config (bootloop fix)",
-        "type": "file",
-        "search_path": "my_product/etc/extension",
-        "match_mode": "exact",
-        "ensure_exists": true,
-        "files": ["sys_graphic_enhancement_config.json"]
-    },
-    {
-        "description": "my_product audio configs",
-        "type": "file",
-        "search_path": "my_product/etc",
-        "match_mode": "glob",
-        "ensure_exists": true,
-        "files": ["audio*.xml", "default_volume_tables.xml"]
-    },
-    {
-        "description": "my_product breenospeech2 directory",
-        "type": "dir",
-        "search_path": "my_product/etc/breenospeech2",
-        "match_mode": "exact",
-        "ensure_exists": true,
-        "files": ["*"]
-    },
-    {
-        "description": "my_product fusionlight_profile directory",
-        "type": "dir",
-        "search_path": "my_product/etc/fusionlight_profile",
-        "match_mode": "exact",
-        "ensure_exists": true,
-        "files": ["*"]
-    },
-    {
-        "description": "my_product permissions XML files",
-        "type": "file",
-        "search_path": "my_product/etc/permissions",
-        "match_mode": "glob",
-        "ensure_exists": true,
-        "files": ["*.xml"]
-    },
-    {
-        "description": "my_product extension XML files",
-        "type": "file",
-        "search_path": "my_product/etc/extension",
-        "match_mode": "glob",
-        "ensure_exists": true,
-        "files": ["*.xml"]
-    },
-    {
-        "description": "my_product refresh rate config",
-        "type": "file",
-        "search_path": "my_product/etc",
-        "match_mode": "exact",
-        "ensure_exists": false,
-        "files": ["refresh_rate_config.xml"]
-    },
-    {
-        "description": "my_product resolution switch config",
-        "type": "file",
-        "search_path": "my_product/etc",
-        "match_mode": "exact",
-        "ensure_exists": false,
-        "files": ["sys_resolution_switch_config.xml"]
-    },
-    {
-        "description": "my_product sensor config",
-        "type": "file",
-        "search_path": "my_product/etc/permissions",
-        "match_mode": "exact",
-        "ensure_exists": false,
-        "files": ["com.oplus.sensor_config.xml"]
-    }
-]
+{
+    "replacements": [
+        {
+            "description": "Charger V6 Update for Android 14",
+            "type": "unzip_override",
+            "source": "devices/common/charger-v6-update.zip",
+            "target_base_dir": "build/target/",
+            "condition_android_version": 14,
+            "removes": [
+                "build/target/odm/bin/hw/vendor.oplus.hardware.charger-V3-service",
+                "build/target/odm/etc/init/vendor.oplus.hardware.charger-V3-service.rc",
+                "build/target/odm/lib/vendor.oplus.hardware.charger-V3-ndk_platform.so",
+                "build/target/odm/lib64/vendor.oplus.hardware.charger-V3-ndk_platform.so"
+            ]
+        },
+        {
+            "description": "Android 13 Fixes Group",
+            "type": "unzip_override_group",
+            "condition_android_version": 13,
+            "operations": [
+                {
+                    "description": "RIL Fix for A13",
+                    "type": "unzip_override",
+                    "source": "devices/common/ril_fix_a13_to_a15.zip",
+                    "target_base_dir": "build/target/"
+                },
+                {
+                    "description": "NFC Fix for A13",
+                    "type": "unzip_override",
+                    "source": "devices/common/nfc_fix_for_a13.zip",
+                    "target_base_dir": "build/target/",
+                    "removes": [
+                        "build/target/odm/bin/hw/vendor.oplus.hardware.nfc@1.0-service",
+                        "build/target/odm/etc/init/vendor.oplus.hardware.nfc@1.0-service.rc",
+                        "build/target/odm/etc/vintf/manifest/manifest_oplus_nfc.xml",
+                        "build/target/odm/lib/vendor.oplus.hardware.nfc@1.0.so"
+                    ]
+                },
+                {
+                    "description": "CryptoEng Fix for A13 (Conditional)",
+                    "type": "unzip_override",
+                    "source": "devices/common/cryptoeng_fix_a13.zip",
+                    "target_base_dir": "build/target/",
+                    "condition_file_exists": "devices/common/cryptoeng_fix_a13.zip"
+                },
+                {
+                    "description": "Clean unnecessary services and manifests for A13",
+                    "type": "remove_files",
+                    "files": [
+                        "build/target/odm/bin/hw/vendor.oplus.hardware.charger@1.0-service",
+                        "build/target/odm/bin/hw/vendor.oplus.hardware.wifi@1.1-service",
+                        "build/target/odm/etc/init/vendor.oneplus.faceunlock.hal@1.0-service.rc",
+                        "build/target/odm/etc/init/vendor.oplus.hardware.charger@1.0-service.rc",
+                        "build/target/odm/etc/init/vendor.oplus.hardware.felica@1.0-service.rc",
+                        "build/target/odm/etc/init/vendor.oplus.hardware.midas@1.0-service.rc",
+                        "build/target/odm/etc/init/vendor.oplus.hardware.wifi@1.1-service-qcom.rc",
+                        "build/target/odm/etc/vintf/manifest/manifest_opfaceunlock.xml",
+                        "build/target/odm/etc/vintf/manifest/manifest_oplus_charger.xml",
+                        "build/target/odm/etc/vintf/manifest/manifest_oplus_cryptoeng_hidl.xml",
+                        "build/target/odm/etc/vintf/manifest/manifest_oplus_felica.xml",
+                        "build/target/odm/etc/vintf/manifest/manifest_oplus_midas.xml",
+                        "build/target/odm/etc/vintf/manifest/oplus_wifi_service_device.xml",
+                        "build/target/odm/framework/vendor.oplus.hardware.wifi-V1.1-java.jar",
+                        "build/target/odm/lib/vendor.oneplus.faceunlock.hal@1.0.so",
+                        "build/target/odm/lib/vendor.oneplus.faceunlock.hal-V1-ndk_platform.so",
+                        "build/target/odm/lib64/vendor.oneplus.faceunlock.hal@1.0.so",
+                        "build/target/odm/lib64/vendor.oneplus.faceunlock.hal-V1-ndk_platform.so",
+                        "build/target/odm/lib64/vendor.oplus.hardware.felica@1.0-impl.so",
+                        "build/target/odm/lib64/vendor.oplus.hardware.felica@1.0.so",
+                        "build/target/odm/lib64/vendor.oplus.hardware.subsys_radio-V1-ndk_platform.so",
+                        "build/target/odm/lib64/vendor.oplus.hardware.subsys-V1-ndk_platform.so",
+                        "build/target/odm/lib64/vendor.oplus.hardware.wifi@1.1.so"
+                    ]
+                }
+            ]
+        }
+    ]
+}

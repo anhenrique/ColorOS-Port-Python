@@ -1,71 +1,7 @@
 {
-    "xml_features": {
-        "support_AI_display": true,
-        "support_aod_fullscreen": true,
-        "support_screen_enhance_engine": true,
-        "support_ota_validate": false
-    },
     "build_props": {
-        "system": {
-            "persist.adb.notify": "0",
-            "persist.sys.usb.config": "mtp,adb",
-            "persist.sys.disable_rescue": "true"
-        },
-        "my_product": {},
-        "my_manifest": {}
-    },
-    "props_remove": [
-        "persist.oplus.software.audio.right_volume_key",
-        "persist.oplus.software.alertslider.location",
-        "ro.oplus.resolution",
-        "ro.oplus.display.wm_size_resolution_switch.support",
-        "ro.density.screenzoom",
-        "ro.oplus.density.qhd_default",
-        "ro.oplus.density.fhd_default",
-        "ro.oplus.key.actionbutton",
-        "ro.oplus.audio.support.foldingmode",
-        "ro.config.fold_disp",
-        "persist.oplus.display.fold.support",
-        "ro.oplus.haptic",
-        "ro.vendor.mtk",
-        "ro.oplus.mtk",
-        "persist.sys.oplus.wlan.atpc.qcom_use_iw",
-        "ro.product.oplus.cpuinfo"
-    ],
-    "props_add": {
-        "ro.oplus.game.camera.support_1_0": "true",
-        "ro.oplus.audio.quiet_start": "true"
-    },
-    "oplus_feature": [
-        "oplus.software.radio.networkless_support^无网畅聊",
-        "oplus.software.display.manual_hbm.support^强光模式",
-        "oplus.software.display.smart_color_temperature_rhythm_health_support^智能色温"
-    ],
-    "app_feature": [],
-    "permission_feature": [],
-    "permission_oplus_feature": [
-        "oplus.software.game.cold.start.speedup.enable"
-    ],
-    "features_remove": [
-        "oplus.software.display.wcg_2.0_support",
-        "oplus.software.display.origin_roundcorner_support",
-        "oplus.software.vibration_ring_mute",
-        "oplus.software.vibration_alarm_clock",
-        "oplus.software.vibration_ringtone",
-        "oplus.software.vibration_threestage_key",
-        "oppo.common.support.curved.display",
-        "oplus.feature.largescreen",
-        "oplus.feature.largescreen.land",
-        "oplus.software.audio.audioeffect_support",
-        "oplus.software.audio.audiox_support",
-        "oppo.breeno.three.words.support",
-        "oplus.software.vibrator_qcom_lmvibrator",
-        "oplus.hardware.vibrator_style_switch",
-        "oplus.software.vibrator_luxunvibrator",
-        "oplus.software.palmprint_non_unify",
-        "oplus.software.palmprint_v1",
-        "oplus.software.palmprint",
-        "com.android.settings.processor_detail_gen2",
-        "com.android.settings.processor_detail"
-    ]
+        "odm": {
+            "persist.vendor.radio.virtualcomm": "1"
+        }
+    }
 }
