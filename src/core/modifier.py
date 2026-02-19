@@ -161,8 +161,10 @@ class SystemModifier:
         removes = rule.get("removes", [])
         if removes:
             self.logger.info(f"  Removing {len(removes)} files/dirs after unzip...")
+            # Resolve removes paths relative to the effective target_base_dir
+            effective_base_dir_for_removes = target_base_dir # Already resolved as self.ctx.work_dir / target_base_dir
             for item_to_remove in removes:
-                full_path = self.ctx.work_dir / item_to_remove # Assume paths are relative to work_dir
+                full_path = effective_base_dir_for_removes / item_to_remove
                 if full_path.exists():
                     if full_path.is_dir():
                         shutil.rmtree(full_path)
@@ -177,8 +179,10 @@ class SystemModifier:
         files_to_remove = rule.get("files", [])
         if files_to_remove:
             self.logger.info(f"  Removing {len(files_to_remove)} specified files/dirs...")
+            # Resolve removes paths relative to the effective target_base_dir or work_dir
+            effective_base_dir_for_removes = self.ctx.work_dir / rule.get("target_base_dir", "")
             for item_to_remove in files_to_remove:
-                full_path = self.ctx.work_dir / item_to_remove
+                full_path = effective_base_dir_for_removes / item_to_remove
                 if full_path.exists():
                     if full_path.is_dir():
                         shutil.rmtree(full_path)

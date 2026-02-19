@@ -7,10 +7,10 @@
             "target_base_dir": "build/target/",
             "condition_android_version": 14,
             "removes": [
-                "build/target/odm/bin/hw/vendor.oplus.hardware.charger-V3-service",
-                "build/target/odm/etc/init/vendor.oplus.hardware.charger-V3-service.rc",
-                "build/target/odm/lib/vendor.oplus.hardware.charger-V3-ndk_platform.so",
-                "build/target/odm/lib64/vendor.oplus.hardware.charger-V3-ndk_platform.so"
+                "odm/bin/hw/vendor.oplus.hardware.charger-V3-service",
+                "odm/etc/init/vendor.oplus.hardware.charger-V3-service.rc",
+                "odm/lib/vendor.oplus.hardware.charger-V3-ndk_platform.so",
+                "odm/lib64/vendor.oplus.hardware.charger-V3-ndk_platform.so"
             ]
         },
         {
@@ -29,13 +29,12 @@
                     "type": "unzip_override",
                     "source": "devices/common/nfc_fix_for_a13.zip",
                     "target_base_dir": "build/target/",
-                    "removes": [
-                        "build/target/odm/bin/hw/vendor.oplus.hardware.nfc@1.0-service",
-                        "build/target/odm/etc/init/vendor.oplus.hardware.nfc@1.0-service.rc",
-                        "build/target/odm/etc/vintf/manifest/manifest_oplus_nfc.xml",
-                        "build/target/odm/lib/vendor.oplus.hardware.nfc@1.0.so"
-                    ]
-                },
+                                            "removes": [
+                                                "odm/bin/hw/vendor.oplus.hardware.nfc@1.0-service",
+                                                "odm/etc/init/vendor.oplus.hardware.nfc@1.0-service.rc",
+                                                "odm/etc/vintf/manifest/manifest_oplus_nfc.xml",
+                                                "odm/lib/vendor.oplus.hardware.nfc@1.0.so"
+                                            ]                },
                 {
                     "description": "CryptoEng Fix for A13 (Conditional)",
                     "type": "unzip_override",
@@ -46,32 +45,31 @@
                 {
                     "description": "Clean unnecessary services and manifests for A13",
                     "type": "remove_files",
-                    "files": [
-                        "build/target/odm/bin/hw/vendor.oplus.hardware.charger@1.0-service",
-                        "build/target/odm/bin/hw/vendor.oplus.hardware.wifi@1.1-service",
-                        "build/target/odm/etc/init/vendor.oneplus.faceunlock.hal@1.0-service.rc",
-                        "build/target/odm/etc/init/vendor.oplus.hardware.charger@1.0-service.rc",
-                        "build/target/odm/etc/init/vendor.oplus.hardware.felica@1.0-service.rc",
-                        "build/target/odm/etc/init/vendor.oplus.hardware.midas@1.0-service.rc",
-                        "build/target/odm/etc/init/vendor.oplus.hardware.wifi@1.1-service-qcom.rc",
-                        "build/target/odm/etc/vintf/manifest/manifest_opfaceunlock.xml",
-                        "build/target/odm/etc/vintf/manifest/manifest_oplus_charger.xml",
-                        "build/target/odm/etc/vintf/manifest/manifest_oplus_cryptoeng_hidl.xml",
-                        "build/target/odm/etc/vintf/manifest/manifest_oplus_felica.xml",
-                        "build/target/odm/etc/vintf/manifest/manifest_oplus_midas.xml",
-                        "build/target/odm/etc/vintf/manifest/oplus_wifi_service_device.xml",
-                        "build/target/odm/framework/vendor.oplus.hardware.wifi-V1.1-java.jar",
-                        "build/target/odm/lib/vendor.oneplus.faceunlock.hal@1.0.so",
-                        "build/target/odm/lib/vendor.oneplus.faceunlock.hal-V1-ndk_platform.so",
-                        "build/target/odm/lib64/vendor.oneplus.faceunlock.hal@1.0.so",
-                        "build/target/odm/lib64/vendor.oneplus.faceunlock.hal-V1-ndk_platform.so",
-                        "build/target/odm/lib64/vendor.oplus.hardware.felica@1.0-impl.so",
-                        "build/target/odm/lib64/vendor.oplus.hardware.felica@1.0.so",
-                        "build/target/odm/lib64/vendor.oplus.hardware.subsys_radio-V1-ndk_platform.so",
-                        "build/target/odm/lib64/vendor.oplus.hardware.subsys-V1-ndk_platform.so",
-                        "build/target/odm/lib64/vendor.oplus.hardware.wifi@1.1.so"
-                    ]
-                }
+                                            "files": [
+                                                "odm/bin/hw/vendor.oplus.hardware.charger@1.0-service",
+                                                "odm/bin/hw/vendor.oplus.hardware.wifi@1.1-service",
+                                                "odm/etc/init/vendor.oneplus.faceunlock.hal@1.0-service.rc",
+                                                "odm/etc/init/vendor.oplus.hardware.charger@1.0-service.rc",
+                                                "odm/etc/init/vendor.oplus.hardware.felica@1.0-service.rc",
+                                                "odm/etc/init/vendor.oplus.hardware.midas@1.0-service.rc",
+                                                "odm/etc/init/vendor.oplus.hardware.wifi@1.1-service-qcom.rc",
+                                                "odm/etc/vintf/manifest/manifest_opfaceunlock.xml",
+                                                "odm/etc/vintf/manifest/manifest_oplus_charger.xml",
+                                                "odm/etc/vintf/manifest/manifest_oplus_cryptoeng_hidl.xml",
+                                                "odm/etc/vintf/manifest/manifest_oplus_felica.xml",
+                                                "odm/etc/vintf/manifest/manifest_oplus_midas.xml",
+                                                "odm/etc/vintf/manifest/oplus_wifi_service_device.xml",
+                                                "odm/framework/vendor.oplus.hardware.wifi-V1.1-java.jar",
+                                                "odm/lib/vendor.oneplus.faceunlock.hal@1.0.so",
+                                                "odm/lib/vendor.oneplus.faceunlock.hal-V1-ndk_platform.so",
+                                                "odm/lib64/vendor.oneplus.faceunlock.hal@1.0.so",
+                                                "odm/lib64/vendor.oneplus.faceunlock.hal-V1-ndk_platform.so",
+                                                "odm/lib64/vendor.oplus.hardware.felica@1.0-impl.so",
+                                                "odm/lib64/vendor.oplus.hardware.felica@1.0.so",
+                                                "odm/lib64/vendor.oplus.hardware.subsys_radio-V1-ndk_platform.so",
+                                                "odm/lib64/vendor.oplus.hardware.subsys-V1-ndk_platform.so",
+                                                "odm/lib64/vendor.oplus.hardware.wifi@1.1.so"
+                                            ]                }
             ]
         }
     ]
