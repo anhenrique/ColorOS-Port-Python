@@ -113,6 +113,8 @@ class Context:
             self.base_market_enname = baserom.get_prop("ro.oplus.market.enname")
         
         self.base_regionmark = baserom.get_prop("ro.vendor.oplus.regionmark")
+        if not self.base_regionmark:
+            self.base_regionmark = baserom.get_prop("ro.oplus.regionmark", "CN")
         
         # LCD Density
         self.base_rom_density = baserom.get_prop("ro.sf.lcd_density")
@@ -148,6 +150,7 @@ class Context:
         # Area and brand
         self.port_area = portrom.get_prop("ro.oplus.image.system_ext.area")
         self.port_brand = portrom.get_prop("ro.oplus.image.system_ext.brand")
+        self.port_oplusrom_version = portrom.get_prop("ro.build.version.oplusrom")
         
         # ROM type detection
         self.portIsRealmeUI = (self.port_brand == "realme")

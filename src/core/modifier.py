@@ -103,39 +103,92 @@ class SystemModifier:
             rule_type = rule.get("type")
             description = rule.get("description", "Unnamed override")
 
-            # Check for top-level Android version condition
-            condition_android_version = rule.get("condition_android_version")
-            if condition_android_version and int(self.ctx.base_android_version) != condition_android_version:
-                self.logger.debug(f"Skipping '{description}' (Android version mismatch: {self.ctx.base_android_version} != {condition_android_version})")
+            # --- Advanced Conditions ---
+            
+            # Port Android Version (e.g., 16)
+            cond_port_v = rule.get("condition_port_android_version")
+            if cond_port_v and int(self.ctx.port_android_version) != cond_port_v:
                 continue
 
-            # Check for top-level Chipset condition (if needed, currently handled by file location)
-            # This would only be for a 'common' replacements.json with rules for specific chipsets.
-            # For now, we rely on the file being in devices/chipset/<CHIPSET>/.
+            # Base Android Version Less Than (e.g., < 15)
+            cond_base_lt = rule.get("condition_base_android_version_lt")
+            if cond_base_lt and int(self.ctx.base_android_version) >= cond_base_lt:
+                continue
+
+            # RegionMark (e.g., "CN")
+            cond_region = rule.get("condition_regionmark")
+            if cond_region:
+                # Handle lists or single string
+                allowed_regions = [cond_region] if isinstance(cond_region, str) else cond_region
+                if self.ctx.base_regionmark not in allowed_regions:
+                    continue
+            
+            # Not RegionMark (e.g., != "CN")
+            cond_not_region = rule.get("condition_not_regionmark")
+            if cond_not_region:
+                if self.ctx.base_regionmark == cond_not_region:
+                    continue
+
+            # Port ROM Version (e.g., "16.0.1")
+            cond_port_rom_v = rule.get("condition_port_rom_version")
+            if cond_port_rom_v and cond_port_rom_v not in str(self.ctx.port_oplusrom_version):
+                continue
+
+            # Base Android version condition (legacy)
+            condition_android_version = rule.get("condition_android_version")
+            if condition_android_version and int(self.ctx.base_android_version) != condition_android_version:
+                continue
 
             if rule_type == "unzip_override":
                 self._execute_unzip_override(rule)
             elif rule_type == "remove_files":
                 self._execute_remove_files(rule)
+            elif rule_type == "copy_file_internal":
+                self._execute_copy_file_internal(rule)
             elif rule_type == "unzip_override_group":
                 self.logger.info(f"Processing override group: {description}")
                 for op in rule.get("operations", []):
+                    # Check nested conditions if needed
+                    # For brevity, recursive condition checking can be added if groups become complex
                     op_type = op.get("type")
-                    op_description = op.get("description", "Unnamed operation in group")
-
-                    # Check for nested condition_file_exists
-                    condition_file_exists = op.get("condition_file_exists")
-                    if condition_file_exists:
-                        if not Path(condition_file_exists).exists():
-                            self.logger.debug(f"Skipping '{op_description}' (Condition file not found: {condition_file_exists})")
-                            continue
                     
+                    # Apply regionmark condition inside group if present
+                    inner_region = op.get("condition_regionmark")
+                    if inner_region and self.ctx.base_regionmark != inner_region: continue
+                    
+                    inner_not_region = op.get("condition_not_regionmark")
+                    if inner_not_region and self.ctx.base_regionmark == inner_not_region: continue
+
                     if op_type == "unzip_override":
                         self._execute_unzip_override(op)
                     elif op_type == "remove_files":
                         self._execute_remove_files(op)
-                    else:
-                        self.logger.warning(f"Unknown operation type in group: {op_type}")
+                    elif op_type == "copy_file_internal":
+                        self._execute_copy_file_internal(op)
+
+    def _execute_copy_file_internal(self, rule):
+        """Copies a file from one place in the target ROM to another."""
+        src_rel = rule.get("source")
+        dst_rel = rule.get("target")
+        target_dir = self.ctx.target_dir
+        
+        src_path = target_dir / src_rel
+        dst_path = target_dir / dst_rel
+        
+        # Condition: Destination path's existence (simulating if [[ -f dst ]])
+        cond_dst_exists = rule.get("condition_target_exists", False)
+        if cond_dst_exists and not dst_path.exists():
+            return
+
+        if src_path.exists():
+            self.logger.info(f"  Copying internal: {src_rel} -> {dst_rel}")
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+            if src_path.is_dir():
+                shutil.copytree(src_path, dst_path, dirs_exist_ok=True)
+            else:
+                shutil.copy2(src_path, dst_path)
+        else:
+            self.logger.warning(f"  Internal copy source not found: {src_path}")
             else:
                 self.logger.debug(f"Skipping unknown override rule type: {rule_type}")
 

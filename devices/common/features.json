@@ -135,6 +135,10 @@
     "build_props": {
         "odm": {
             "persist.vendor.radio.virtualcomm": "1"
+        },
+        "vendor": {
+            "vendor.audio.c2.preferred": "true",
+            "vendor.audio.hdr.record.enable": "false"
         }
     }
 }

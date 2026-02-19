@@ -1,0 +1,10 @@
+{
+    "replacements": [
+        {
+            "description": "Find X3 Pro Brightness Fix",
+            "type": "remove_files",
+            "target_base_dir": "build/target/",
+            "files": ["my_product/vendor/etc/display_apollo_list.xml"]
+        }
+    ]
+}
