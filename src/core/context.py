@@ -195,8 +195,10 @@ class Context:
 
     def install_partitions(self):
         # Use ThreadPoolExecutor for parallel partition installation
-        max_workers = 4
+        import os
+        max_workers = os.cpu_count() or 4
         
+        self.logger.info(f"Installing partitions using {max_workers} threads...")
         partition_list = []
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -225,13 +227,22 @@ class Context:
             return
 
         dest_dir = self.target_dir / partition
+        self.logger.info(f"[{source_rom.label}] Installing partition: {partition} -> {dest_dir.relative_to(self.work_dir)}")
         
         if dest_dir.exists():
             shutil.rmtree(dest_dir)
         
         # 2. Copy partition files to target directory
-        # Copy content of src_dir, not src_dir itself
-        shutil.copytree(src_dir, dest_dir, symlinks=True, dirs_exist_ok=True)
+        # Use native 'cp -af' for better performance and preservation of links/attrs
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        # cp -af src_dir/. dest_dir/ ensures contents are copied into dest_dir
+        cmd = f"cp -af {src_dir}/. {dest_dir}/"
+        try:
+            Shell.run(cmd)
+        except Exception as e:
+            self.logger.error(f"Failed to copy partition {partition}: {e}")
+            # Fallback to shutil if native cp fails
+            shutil.copytree(src_dir, dest_dir, symlinks=True, dirs_exist_ok=True)
         
         # 3. Copy partition configuration files to target_config_dir for Packer
         # (Since extract_partition_to_file moved them out to source_rom/config)
