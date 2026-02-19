@@ -624,6 +624,102 @@ class SystemModifier:
         if props_add:
             self._apply_build_props(props_add)
 
+    def _apply_coloros_xml_features(self, features: list, feature_type: str):
+        """Apply ColorOS XML features - port.sh add_feature_v2 logic"""
+        if not features:
+            return
+        
+        # Determine target directory and file based on feature type
+        target_dir = self.ctx.target_dir / "my_product" / "etc"
+        
+        if feature_type == "oplus_feature":
+            xml_dir = target_dir / "extension"
+            base_file = "com.oplus.oplus-feature"
+            root_tag = "oplus-config"
+            node_tag = "oplus-feature"
+        elif feature_type == "app_feature":
+            xml_dir = target_dir / "extension"
+            base_file = "com.oplus.app-features"
+            root_tag = "extend_features"
+            node_tag = "app_feature"
+        elif feature_type == "permission_feature":
+            xml_dir = target_dir / "permissions"
+            base_file = "com.oplus.android-features"
+            root_tag = "permissions"
+            node_tag = "feature"
+        elif feature_type == "permission_oplus_feature":
+            xml_dir = target_dir / "permissions"
+            base_file = "oplus.feature-android"
+            root_tag = "oplus-config"
+            node_tag = "oplus-feature"
+        else:
+            return
+        
+        xml_dir.mkdir(parents=True, exist_ok=True)
+        output_file = xml_dir / f"{base_file}-ext.xml"
+        
+        # Create file if not exists
+        if not output_file.exists():
+            content = f'<?xml version="1.0" encoding="UTF-8"?>\n<{root_tag}>\n</{root_tag}>\n'
+            output_file.write_text(content, encoding='utf-8')
+        
+        # Read existing content
+        content = output_file.read_text(encoding='utf-8')
+        
+        for entry in features:
+            # Parse entry: "feature^comment^args" or just "feature"
+            parts = entry.split('^')
+            feature = parts[0].strip()
+            comment = parts[1].strip() if len(parts) > 1 and parts[1] else ""
+            extra = parts[2].strip() if len(parts) > 2 else ""
+            
+            # Check if feature already exists in any XML
+            exists = self._check_feature_exists(feature)
+            if exists:
+                self.logger.info(f"Feature {feature} already exists, skipping.")
+                continue
+            
+            # Add feature
+            self.logger.info(f"Adding feature: {feature}")
+            
+            # Build attribute string
+            attrs = f'name="{feature}"'
+            if extra:
+                # Handle args=\"boolean:true\" etc
+                # If extra starts with args=, it's already formatted
+                if extra.startswith("args="):
+                    attrs = f'{attrs} {extra}'
+                else:
+                    attrs = f'{attrs} {extra}'
+            
+            # Add comment before feature
+            if comment:
+                comment_line = f"    <!-- {comment} -->\n"
+                content = content.replace(f"</{root_tag}>", comment_line + f"    <{node_tag} {attrs}/>\n</{root_tag}>")
+            else:
+                content = content.replace(f"</{root_tag}>", f"    <{node_tag} {attrs}/>\n</{root_tag}>")
+        
+        output_file.write_text(content, encoding='utf-8')
+
+    def _remove_features_from_xml(self, features: list, force: bool = False):
+        """Remove features from XML - port.sh remove_feature function"""
+        my_product_etc = self.ctx.target_dir / "my_product" / "etc"
+        if not my_product_etc.exists():
+            return
+        
+        for feature in features:
+            for xml_file in my_product_etc.rglob("*.xml"):
+                try:
+                    content = xml_file.read_text(encoding='utf-8', errors='ignore')
+                    if feature in content:
+                        # Simple removal
+                        content = content.replace(feature, "")
+                        # Clean up potentially empty tags if needed, but for now just match bash logic
+                        xml_file.write_text(content, encoding='utf-8')
+                        self.logger.info(f"Removed feature {feature} from {xml_file.name}")
+                except Exception:
+                    pass
+
     def _check_feature_exists(self, feature: str) -> bool:
         """Check if feature already exists in any XML file"""
         my_product_etc = self.ctx.target_dir / "my_product" / "etc"
