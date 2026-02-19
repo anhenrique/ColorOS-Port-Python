@@ -23,9 +23,33 @@ def parse_args():
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     return parser.parse_args()
 
-def setup_logging(debug: bool = False):
+def setup_logging(work_dir: Path, debug: bool = False):
     level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(level=level, format='%(asctime)s - %(levelname)s - %(message)s')
+    
+    # Create work_dir if not exists
+    work_dir.mkdir(parents=True, exist_ok=True)
+    log_file = work_dir / "port.log"
+    
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    
+    # Root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(level)
+    
+    # Clear existing handlers
+    root_logger.handlers = []
+    
+    # Console Handler
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    root_logger.addHandler(console_handler)
+    
+    # File Handler
+    file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
+    file_handler.setFormatter(formatter)
+    root_logger.addHandler(file_handler)
+    
+    logger.info(f"Logging initialized. Log file: {log_file}")
 
 def detect_device_code(rom_path: str, args_device_code: str | None = None) -> str | None:
     # Priority 1: User Argument
@@ -45,9 +69,10 @@ def detect_device_code(rom_path: str, args_device_code: str | None = None) -> st
 
 def main():
     args = parse_args()
+    work_dir = Path(args.work_dir).resolve()
     
-    # Setup logging based on debug flag
-    setup_logging(args.debug)
+    # Setup logging based on debug flag and work_dir
+    setup_logging(work_dir, args.debug)
     
     # 1. Initial Device Code Detection (Filename/Args)
     device_code = detect_device_code(args.baserom, args.device_code)
@@ -59,9 +84,6 @@ def main():
     except Exception as e:
         logger.error(f"Failed to load configuration: {e}")
         sys.exit(1)
-
-    work_dir = Path(args.work_dir).resolve()
-    work_dir.mkdir(parents=True, exist_ok=True)
 
     # Initialize Tools
     tools = ToolManager(Path("bin").resolve())
