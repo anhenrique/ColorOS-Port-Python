@@ -639,15 +639,19 @@ class RomPackage:
         if not self.extracted_dir.exists():
             return self._apk_cache
         
-        import subprocess
-        aapt_bin = self._find_aapt()
+        apk_files = list(self.extracted_dir.rglob("*.apk"))
         
-        for apk in self.extracted_dir.rglob("*.apk"):
+        def _parse_apk(apk):
             try:
-                result = subprocess.run(
-                    [str(aapt_bin), "dump", "badging", str(apk)],
-                    capture_output=True, text=True, timeout=10
+                # Use self.shell.run to handle binary pathing and LD_LIBRARY_PATH
+                result = self.shell.run(
+                    ["aapt", "dump", "badging", str(apk)],
+                    capture_output=True, check=False
                 )
+                
+                if result.returncode != 0:
+                    return None, None
+                    
                 output = result.stdout
                 
                 package_name = None
@@ -658,14 +662,15 @@ class RomPackage:
                     if line.startswith("package: name='"):
                         pkg = line.split("name='")[1].split("'")[0]
                         package_name = pkg
-                    elif line.startswith("versionCode="):
-                        vc = line.split("versionCode=")[1].split(" ")[0]
-                        version_code = int(vc) if vc.isdigit() else None
-                    elif line.startswith("versionName="):
-                        version_name = line.split("versionName=")[1].split(" ")[0].strip("'")
+                    elif "versionCode='" in line:
+                         # aapt dump badging format: package: name='...' versionCode='...' ...
+                         vc = line.split("versionCode='")[1].split("'")[0]
+                         version_code = int(vc) if vc.isdigit() else None
+                    elif "versionName='" in line:
+                         version_name = line.split("versionName='")[1].split("'")[0]
                 
                 if package_name:
-                    self._apk_cache[package_name] = {
+                    return package_name, {
                         'path': apk,
                         'relative_path': apk.relative_to(self.extracted_dir),
                         'version_code': version_code,
@@ -673,15 +678,18 @@ class RomPackage:
                     }
             except Exception as e:
                 self.logger.debug(f"Failed to parse {apk.name}: {e}")
+            return None, None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as executor:
+            results = executor.map(_parse_apk, apk_files)
+            
+            for pkg_name, info in results:
+                if pkg_name:
+                    self._apk_cache[pkg_name] = info
         
         self.logger.info(f"[{self.label}] Found {len(self._apk_cache)} APKs")
         return self._apk_cache
-    
+
     def _find_aapt(self) -> Path:
-        """Find aapt binary in bin directory"""
-        bin_root = Path("bin")
-        for arch in ["linux/x86_64", "linux/arm64", "linux", "windows/x86_64", "darwin"]:
-            aapt = bin_root / arch / "aapt"
-            if aapt.exists():
-                return aapt
-        return bin_root / "aapt"
+        """Find aapt binary in bin directory (Deprecated: use self.shell.run)"""
+        return Path("aapt")

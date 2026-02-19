@@ -83,6 +83,20 @@ class SystemModifier:
 
         self.logger.info("System Modification Completed.")
 
+    def _build_target_index(self, root: Path):
+        """Build a cache of all files and directories in the target root for faster lookup"""
+        self.logger.debug(f"Indexing target directory: {root}")
+        index = {}
+        if not root.exists():
+            return index
+        
+        for item in root.rglob("*"):
+            name = item.name
+            if name not in index:
+                index[name] = []
+            index[name].append(item)
+        return index
+
     def _process_replacements(self):
         """
         Execute file/directory replacements defined in replacements.json.
@@ -96,6 +110,27 @@ class SystemModifier:
         
         stock_root = self.ctx.stock.extracted_dir
         target_root = self.ctx.target_dir
+        
+        # Pre-scan target directory for fast recursive lookups
+        target_index = self._build_target_index(target_root)
+
+        def _handle_copy_op(src_item, target_item, rel_name):
+            self.logger.info(f"  Replacing/Adding: {rel_name}")
+            if not target_item.parent.exists():
+                target_item.parent.mkdir(parents=True, exist_ok=True)
+                
+            if target_item.exists():
+                if target_item.is_dir():
+                    shutil.rmtree(target_item)
+                else:
+                    target_item.unlink()
+            
+            if src_item.is_dir():
+                shutil.copytree(src_item, target_item, symlinks=True, dirs_exist_ok=True)
+            else:
+                shutil.copy2(src_item, target_item)
+
+        copy_tasks = []
 
         for rule in replacements:
             desc = rule.get("description", "Unknown Rule")
@@ -111,7 +146,6 @@ class SystemModifier:
                 self._process_package_replacement(rule, desc, stock_root, target_root)
                 continue
 
-            # Original logic for file/dir types
             rule_stock_root = stock_root / search_path
             rule_target_root = target_root / search_path
 
@@ -141,10 +175,26 @@ class SystemModifier:
                     found_in_target = False
                     
                     if match_mode == "recursive":
-                        candidates = list(rule_target_root.rglob(rel_name))
+                        # Use target_index for fast lookup
+                        candidates = target_index.get(rel_name, [])
                         if candidates:
-                            target_item = candidates[0]
-                            found_in_target = True
+                            # Prefer candidate that is under the rule_target_root if possible
+                            best_match = None
+                            for cand in candidates:
+                                try:
+                                    cand.relative_to(rule_target_root)
+                                    best_match = cand
+                                    break
+                                except ValueError:
+                                    continue
+                            
+                            if best_match:
+                                target_item = best_match
+                                found_in_target = True
+                            else:
+                                # If no candidate under rule_target_root, use the first one found
+                                target_item = candidates[0]
+                                found_in_target = True
                     else:
                         if target_item.exists():
                             found_in_target = True
@@ -161,38 +211,27 @@ class SystemModifier:
                             except: pass
 
                     if should_copy:
-                        self.logger.info(f"  Replacing/Adding: {rel_name}")
-                        
-                        if not target_item.parent.exists():
-                            target_item.parent.mkdir(parents=True, exist_ok=True)
-                            
-                        if target_item.exists():
-                            if target_item.is_dir():
-                                shutil.rmtree(target_item)
-                            else:
-                                target_item.unlink()
-                        
-                        if src_item.is_dir():
-                            shutil.copytree(src_item, target_item, symlinks=True, dirs_exist_ok=True)
-                        else:
-                            shutil.copy2(src_item, target_item)
+                        copy_tasks.append((src_item, target_item, rel_name))
                     else:
                         self.logger.debug(f"  Skipping {rel_name} (Target missing and ensure_exists=False)")
+
+        # Execute all copy operations in parallel
+        if copy_tasks:
+            self.logger.info(f"Executing {len(copy_tasks)} replacement tasks in parallel...")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as executor:
+                futures = [executor.submit(_handle_copy_op, *task) for task in copy_tasks]
+                concurrent.futures.wait(futures)
 
     def _process_package_replacement(self, rule, desc, stock_root, target_root):
         """Process replacements by APK package name"""
         search_path = rule.get("search_path", "")
         files = rule.get("files", [])
         
+        # scan_apks is cached in RomPackage, so this is fast
         stock_apks = self.ctx.stock.scan_apks()
         target_apks = self.ctx.port.scan_apks()
         
-        rule_stock_root = stock_root / search_path
         rule_target_root = target_root / search_path
-        
-        if not rule_stock_root.exists():
-            self.logger.debug(f"Source path not found: {rule_stock_root}")
-            return
         
         for pkg_name in files:
             stock_apk_info = stock_apks.get(pkg_name)
@@ -221,6 +260,7 @@ class SystemModifier:
                     dst_path.unlink()
             
             shutil.copy2(src_path, dst_path)
+
 
     def _load_replacement_config(self):
         """
@@ -275,60 +315,34 @@ class SystemModifier:
                 return
 
             # 2. Iterate and Smart Replace
-            # Walk through extracted files to find APKs
-            for apk_file in tmp_path.rglob("*.apk"):
-                # Get package name using aapt2
+            # Scan EU Bundle APKs in parallel
+            bundle_apks = list(tmp_path.rglob("*.apk"))
+            
+            def _process_eu_apk(apk_file):
                 pkg_name = self._get_package_name(apk_file)
                 if not pkg_name:
-                    continue
-                
-                # relative path inside bundle (e.g. product/app/MiuiCamera/MiuiCamera.apk)
-                # We need to determine the root relative to the bundle structure.
-                # Assuming bundle structure mirrors system root (e.g. system/..., product/...)
+                    return None
                 
                 # Find matching app in Target ROM
-                # Scan common app directories in target
-                found_in_target = False
-                target_roots = [
-                    self.ctx.target_dir / "system/app",
-                    self.ctx.target_dir / "system/priv-app",
-                    self.ctx.target_dir / "product/app",
-                    self.ctx.target_dir / "product/priv-app",
-                    self.ctx.target_dir / "system_ext/app",
-                    self.ctx.target_dir / "system_ext/priv-app"
-                ]
+                # Use scan_apks() for fast lookup
+                target_apks = self.ctx.port.scan_apks()
+                target_apk_info = target_apks.get(pkg_name)
                 
-                for root in target_roots:
-                    if not root.exists(): continue
+                if target_apk_info:
+                    app_dir = target_apk_info['path'].parent
+                    self.logger.info(f"Replacing EU App: {pkg_name}")
+                    self.logger.info(f"  - Removing: {app_dir}")
                     
-                    # Search recursively in this app root
-                    for target_apk in root.rglob("*.apk"):
-                        target_pkg = self._get_package_name(target_apk)
-                        if target_pkg == pkg_name:
-                            # FOUND MATCH!
-                            app_dir = target_apk.parent
-                            self.logger.info(f"Replacing EU App: {pkg_name}")
-                            self.logger.info(f"  - Removing: {app_dir}")
-                            
-                            # Delete old dir
-                            shutil.rmtree(app_dir)
-                            
-                            # Calculate new destination
-                            # We place the new app in the SAME location structure as the bundle
-                            # relative_path = apk_file.relative_to(tmp_path)
-                            # dest_path = self.ctx.target_dir / relative_path
-                            
-                            # Actually, we should probably place it where the old one was to be safe?
-                            # OR trust the bundle structure. 
-                            # If we trust bundle structure, we just copy.
-                            # But we must delete the old one first to avoid duplicates if path differs.
-                            
-                            found_in_target = True
-                            break
-                    if found_in_target: break
-                
-                if not found_in_target:
+                    # Delete old dir
+                    if app_dir.exists():
+                        shutil.rmtree(app_dir)
+                    return True
+                else:
                     self.logger.info(f"Adding new EU App: {pkg_name}")
+                    return False
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as executor:
+                executor.map(_process_eu_apk, bundle_apks)
 
             # 3. Merging Bundle Files
             # Now that we've cleaned up conflicts, simply overlay the bundle
