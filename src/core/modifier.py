@@ -170,6 +170,9 @@ class SystemModifier:
                         self._execute_remove_files(op)
                     elif op_type == "copy_file_internal":
                         self._execute_copy_file_internal(op)
+            else:
+                self.logger.debug(f"Skipping unknown override rule type: {rule_type}")
+
 
     def _execute_copy_file_internal(self, rule):
         """Copies a file from one place in the target ROM to another."""
@@ -194,8 +197,6 @@ class SystemModifier:
                 shutil.copy2(src_path, dst_path)
         else:
             self.logger.warning(f"  Internal copy source not found: {src_path}")
-            else:
-                self.logger.debug(f"Skipping unknown override rule type: {rule_type}")
 
 
     def _execute_unzip_override(self, rule):
