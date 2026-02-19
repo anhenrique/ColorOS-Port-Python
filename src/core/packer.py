@@ -864,21 +864,29 @@ class Repacker:
         self.logger.info(f"Determining Super size for: Device={device_code}, Model={product_model}")
 
         size_map = {
-            # 9GB - OP8/9 Series, early A14 devices
-            9126805504: [
-                "ONEPLUS8", "ONEPLUS8PRO", "ONEPLUS8T", "KEBAB", "INSTANTNOODLE", "INSTANTNOODLEP",
-                "ONEPLUS9", "ONEPLUS9PRO", "LEMONADE", "LEMONADEP",
-                "PKX110", "PHP110", "PHB110" # OP11/12/13 Series
-            ],
-            # 12GB - Newer flagship specs
-            12884901888: ["ONEPLUS12", "ONEPLUS13", "PJSH110"],
+            # 15GB - OP8/8Pro and General Default
+            15032385536: ["ONEPLUS8", "ONEPLUS8PRO", "INSTANTNOODLE", "INSTANTNOODLEP"],
+            # 7.5GB - OP8T
+            7516192768: ["ONEPLUS8T", "KEBAB"],
+            # 9.9GB - OP9R
+            9932111872: ["ONEPLUS9R"],
+            # 11.19GB - Find X3 / OP9 / OP9P
+            11190403072: ["OP4E5D", "ONEPLUS9", "ONEPLUS9PRO", "LEMONADE", "LEMONADEP"],
+            # 11.18GB - Find X3 Pro
+            11186208768: ["OP4E3F"],
+            # 11.27GB - Realme GT Neo 3T etc
+            11274289152: ["RE54E4L1", "RMX3371"],
+            # 10.2GB - GT Neo 2
+            10200547328: ["RE5473", "RE879AL1"],
+            # 16.1GB - Ace 3V
+            16106127360: ["OP5CFBL1"],
+            # 14.5GB - Ace 5
+            14574100480: ["OP5D2BL1"],
+            # 14.95GB - OnePlus 13T
+            14952693760: ["OP60F5L1", "PKX110"],
             
-            # Xiaomi High-end (Approx 9GB)
+            # Xiaomi High-end
             9663676416: ["FUXI", "NUWA", "ISHTAR", "MARBLE", "SOCRATES", "BABYLON"],
-            
-            # Other variants
-            9122611200: ["SUNSTONE"],
-            11811160064: ["YUDI"],
         }
 
         # Try to match device_code first, then product_model
@@ -889,7 +897,7 @@ class Repacker:
                 return size
 
         # Default size
-        default_size = 9126805504
+        default_size = 15032385536
         self.logger.info(f"No specific match found, using default size: {default_size}")
         
         return default_size
