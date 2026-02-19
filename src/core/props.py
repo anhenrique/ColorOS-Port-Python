@@ -18,9 +18,92 @@ class PropertyModifier:
         # 1. Fetch ROM Info (populates context with properties)
         self.ctx.fetch_rom_info()
         
-        # 2. Modify build.prop files
+        # 2. Reconstruct my_product props (New Logic)
+        self._reconstruct_my_product_props()
+        
+        # 3. Modify build.prop files
         self._modify_build_props()
         
+    def _reconstruct_my_product_props(self):
+        """
+        Reconstructs my_product/build.prop by using baserom as base 
+        and moving portrom-specific props to etc/bruce/build.prop.
+        Matches the logic from prepare_base_prop and add_prop_from_port.
+        """
+        target_my_product = self.target_dir / "my_product"
+        if not target_my_product.exists():
+            return
+
+        logger.info("Reconstructing my_product properties (Base-led strategy)...")
+
+        # 1. Paths
+        base_prop_file = self.ctx.baserom.extracted_dir / "my_product" / "build.prop"
+        if not base_prop_file.exists():
+            base_prop_file = self.ctx.baserom.extracted_dir / "my_product" / "etc" / "build.prop"
+        
+        port_prop_file = self.ctx.portrom.extracted_dir / "my_product" / "build.prop"
+        if not port_prop_file.exists():
+            port_prop_file = self.ctx.portrom.extracted_dir / "my_product" / "etc" / "build.prop"
+
+        target_prop_main = target_my_product / "build.prop"
+        target_prop_bruce = target_my_product / "etc" / "bruce" / "build.prop"
+
+        # 2. Force Keys (from Port)
+        force_keys = [
+            "ro.build.version.oplusrom",
+            "ro.build.version.oplusrom.display",
+            "ro.build.version.oplusrom.confidential",
+            "ro.build.version.realmeui"
+        ]
+
+        # 3. Parse Props
+        base_props = self._read_prop_to_dict(base_prop_file)
+        port_props = self._read_prop_to_dict(port_prop_file)
+
+        # 4. Calculate Bruce Props (Port-only props + Force keys)
+        bruce_props = {}
+        for key, value in port_props.items():
+            if key in force_keys or key not in base_props:
+                bruce_props[key] = value
+                logger.debug(f"Adding to bruce.prop: {key}={value}")
+
+        # 5. Overwrite target main prop with Base content
+        import shutil
+        if base_prop_file.exists():
+            shutil.copy2(base_prop_file, target_prop_main)
+        
+        # 6. Ensure Import statement in main prop
+        import_line = "import /mnt/vendor/my_product/etc/bruce/build.prop"
+        content = target_prop_main.read_text(encoding='utf-8', errors='ignore')
+        if import_line not in content:
+            with open(target_prop_main, "a", encoding='utf-8') as f:
+                f.write(f"\n\n# Bruce Property Patch\n{import_line}\n")
+
+        # 7. Write Bruce Props
+        target_prop_bruce.parent.mkdir(parents=True, exist_ok=True)
+        with open(target_prop_bruce, "w", encoding='utf-8') as f:
+            f.write("# Properties added from Port ROM\n")
+            for key in sorted(bruce_props.keys()):
+                f.write(f"{key}={bruce_props[key]}\n")
+        
+        logger.info(f"Reconstruction complete. {len(bruce_props)} props moved to bruce/build.prop")
+
+    def _read_prop_to_dict(self, file_path: Path) -> dict:
+        props = {}
+        if not file_path.exists():
+            return props
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, val = line.split("=", 1)
+                    props[key.strip()] = val.strip()
+        except Exception as e:
+            logger.error(f"Failed to read {file_path}: {e}")
+        return props
+
     def _modify_build_props(self):
         """Main build.prop modification - port.sh lines 1340-1600"""
         self._modify_all_build_props()
@@ -75,7 +158,7 @@ class PropertyModifier:
                 build_prop.write_text(content, encoding='utf-8')
 
     def _modify_my_product_props(self):
-        """Modify my_product build.prop - port.sh lines 1378-1522"""
+        """Modify my_product build.prop patches - port.sh lines 1378-1522"""
         target_my_product = self.target_dir / "my_product"
         if not target_my_product.exists():
             return
@@ -83,29 +166,23 @@ class PropertyModifier:
         bruce_prop = target_my_product / "etc" / "bruce" / "build.prop"
         my_product_prop = target_my_product / "build.prop"
         
-        # Market name/enname
+        # Market name/enname (Always in bruce patch)
         if self.ctx.base_market_name:
             self._add_or_replace_prop(bruce_prop, "ro.vendor.oplus.market.name", self.ctx.base_market_name)
         if self.ctx.base_market_enname:
             self._add_or_replace_prop(bruce_prop, "ro.vendor.oplus.market.enname", self.ctx.base_market_enname)
         
-        # Ported by watermark
-        oplusrom_prop = my_product_prop if my_product_prop.exists() else bruce_prop
-        if self._read_prop_value(oplusrom_prop, "ro.build.version.oplusrom.display"):
-            self._add_or_replace_prop(oplusrom_prop, "ro.build.version.oplusrom.display", 
-                                      self._read_prop_value(oplusrom_prop, "ro.build.version.oplusrom.display") + " | Ported By BT")
-        
-        # RealmeUI version
-        if self.ctx.portIsRealmeUI:
-            rui_version_map = {"16": "7.0", "15": "6.0", "14": "5.0"}
-            rui_version = rui_version_map.get(self.ctx.port_android_version, "5.0")
-            self._add_prop(bruce_prop, f"ro.build.version.realmeui={rui_version}")
+        # Ported by watermark (Modify the effective file)
+        target_v_file = my_product_prop if my_product_prop.exists() else bruce_prop
+        old_v = self._read_prop_value(target_v_file, "ro.build.version.oplusrom.display")
+        if old_v and "Ported By" not in old_v:
+            self._add_or_replace_prop(target_v_file, "ro.build.version.oplusrom.display", f"{old_v} | Ported By BT")
         
         # Magic model props
-        self._add_prop(bruce_prop, f"persist.oplus.prophook.com.oplus.ai.magicstudio=MODEL:{self.ctx.base_device_code},BRAND:{self.ctx.base_product_model}")
-        self._add_prop(bruce_prop, f"persist.oplus.prophook.com.oplus.aiunit=MODEL:{self.ctx.base_device_code},BRAND:{self.ctx.base_product_model}")
+        self._add_or_replace_prop(bruce_prop, "persist.oplus.prophook.com.oplus.ai.magicstudio", f"MODEL:{self.ctx.base_device_code},BRAND:{self.ctx.base_product_model}")
+        self._add_or_replace_prop(bruce_prop, "persist.oplus.prophook.com.oplus.aiunit", f"MODEL:{self.ctx.base_device_code},BRAND:{self.ctx.base_product_model}")
         
-        # LCD Density from base
+        # LCD Density from base (Should stay in main my_product prop)
         if self.ctx.base_rom_density:
             self._add_or_replace_prop(my_product_prop, "ro.sf.lcd_density", self.ctx.base_rom_density)
 
