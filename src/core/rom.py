@@ -507,33 +507,53 @@ class RomPackage:
     
     def parse_all_props(self):
         """
-        [Optimization] Recursively find all build.prop files in extracted dir
+        [Optimization] Find all build.prop files in known partition locations
+        Avoids slow rglob through thousands of app/lib directories.
         """
         if not self.extracted_dir.exists():
             self.logger.warning(f"[{self.label}] Extracted dir not found, skipping props parsing.")
             return
 
-        # [New] Clear history to prevent stacking from multiple calls
         self.props = {}
         self.prop_history = {}
 
-        self.logger.info(f"[{self.label}] Scanning and parsing all build.prop files...")
+        self.logger.info(f"[{self.label}] Scanning and parsing build.prop files...")
 
-        # 1. Find files
-        prop_files = list(self.extracted_dir.rglob("build.prop"))
+        # 1. Define known locations for build.prop
+        # Structure: <partition>/build.prop or <partition>/etc/build.prop
+        partitions = [
+            "system/system", "system", "vendor", "product", "odm", "system_ext", 
+            "my_product", "my_manifest", "my_stock", "my_region", "my_carrier", "mi_ext"
+        ]
+        
+        prop_files = []
+        for part in partitions:
+            # Check partition root
+            p1 = self.extracted_dir / part / "build.prop"
+            if p1.exists(): prop_files.append(p1)
+            
+            # Check etc directory
+            p2 = self.extracted_dir / part / "etc" / "build.prop"
+            if p2.exists(): prop_files.append(p2)
+
         if not prop_files:
-            self.logger.warning(f"[{self.label}] No build.prop files found.")
-            return
+            # Fallback only if no standard props found
+            self.logger.debug(f"[{self.label}] No standard build.prop found, falling back to limited scan.")
+            prop_files = list(self.extracted_dir.glob("*/build.prop")) + \
+                         list(self.extracted_dir.glob("*/etc/build.prop"))
 
         # 2. Sort (System -> Vendor -> Product ...)
         def sort_priority(path):
             p = str(path).lower()
-            if "system" in p: return 0
-            if "vendor" in p: return 1
-            if "product" in p: return 2
-            if "odm" in p: return 3
-            if "mi_ext" in p: return 4
+            if "system/system" in p: return 0
+            if "system/" in p: return 1
+            if "vendor" in p: return 2
+            if "product" in p: return 3
+            if "odm" in p: return 4
             return 99
+        
+        # Remove duplicates while preserving order (using dict)
+        prop_files = list(dict.fromkeys(prop_files))
         prop_files.sort(key=sort_priority)
 
         # 3. Parse one by one
