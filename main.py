@@ -138,27 +138,21 @@ def main():
         sys.exit(1)
     
     # 2. Refined Device Code Detection (After Extraction)
-    if not device_code:
-        manifest_prop = baserom.images_dir / "my_manifest/build.prop"
-        if manifest_prop.exists():
-            try:
-                with open(manifest_prop, 'r', errors='ignore') as f:
-                    for line in f:
-                        if "ro.oplus.version.my_manifest=" in line:
-                            val = line.split('=')[1].strip()
-                            device_code = val.split('_')[0]
-                            logger.info(f"Detected device code from build.prop: {device_code}")
-                            break
-            except Exception as e:
-                logger.warning(f"Could not read device code from manifest: {e}")
+    # Priority: ro.product.model (most accurate for display/config)
+    if not device_code or device_code == "common":
+        # Ensure we have parsed props
+        model = baserom.get_prop("ro.product.model")
+        if model:
+            device_code = model.strip().replace(" ", "").upper()
+            logger.info(f"Refined device code from build.prop: {device_code}")
         
-        # If successfully detected now, reload config
+        # If successfully detected or changed, reload config
         if device_code:
             try:
                 config = Config.load(device_code)
                 logger.info(f"Reloaded configuration for detected device: {device_code}")
             except Exception as e:
-                logger.warning(f"Failed to reload config for {device_code}, using common config.")
+                logger.warning(f"No specific config for {device_code}, continuing with current config.")
 
     # Initialize Context with finalized config
     logger.info("Initializing Porting Context...")
