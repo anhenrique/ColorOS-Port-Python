@@ -147,7 +147,7 @@ class Context:
         self.security_patch = portrom.get_prop("ro.build.version.security_patch")
         
         # AB device
-        is_ab = portrom.get_prop("ro.build.ab_update")
+        is_ab = baserom.get_prop("ro.build.ab_update")
         self.is_ab_device = (is_ab == "true")
         
         # ROM version

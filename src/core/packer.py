@@ -833,7 +833,7 @@ class Repacker:
 
         cmd = [
             str(self.ota_tools_dir / "bin" / "ota_from_target_files"),
-            "-v", 
+           # "-v", 
             "-k", str(key_path),
             str(self.product_out),
             str(output_zip)

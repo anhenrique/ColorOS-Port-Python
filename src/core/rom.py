@@ -7,6 +7,7 @@ import os
 from enum import Enum, auto
 from pathlib import Path
 from src.utils.shell import ShellRunner
+from src.utils.imgextractor.imgextractor import Extractor
 
 ANDROID_LOGICAL_PARTITIONS = [
     "system", "system_ext", "product", "vendor", "odm", "mi_ext",
@@ -385,25 +386,64 @@ class RomPackage:
         target_dir.mkdir(parents=True, exist_ok=True)
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
-        # 3. Try erofs extraction first (most common for ColorOS/MIUI)
-        # Reference: HyperOS-Port-Python just assumes erofs
-        try:
-            cmd = ["extract.erofs", "-x", "-i", str(img_path), "-o", str(self.extracted_dir)]
-            self.shell.run(cmd, capture_output=True)
-        except Exception as e:
-            # Try ext4 as fallback
-            self.logger.debug(f"EROFS extraction failed, trying ext4: {e}")
+        # 3. Detect filesystem type
+        fs_type = self._detect_filesystem(img_path)
+        self.logger.info(f"[{self.label}] Detected filesystem for {part_name}: {fs_type}")
+
+        if fs_type == "sparse_image":
+            self.logger.info(f"[{self.label}] {part_name}.img is sparse, converting to raw...")
+            # We already have simg2img detection in _process_sparse_images, 
+            # but let's do a quick local conversion if needed.
+            # Usually images from lpunpack are already raw.
+            # But if somehow it's still sparse:
+            try:
+                from src.utils.imgextractor.imgextractor import simg2img
+                simg2img(str(img_path))
+                fs_type = self._detect_filesystem(img_path)
+            except Exception as e:
+                self.logger.warning(f"Sparse conversion failed: {e}")
+
+        # 4. Extract based on filesystem
+        if fs_type == "erofs":
+            try:
+                cmd = ["extract.erofs", "-x", "-i", str(img_path), "-o", str(self.extracted_dir)]
+                self.shell.run(cmd, capture_output=True)
+            except Exception as e:
+                self.logger.error(f"EROFS extraction failed: {e}")
+                # Fallback to 7z if erofs extraction tool fails unexpectedly
+                try:
+                    import subprocess
+                    cmd = ["7z", "x", str(img_path), f"-o{self.extracted_dir}", "-y"]
+                    subprocess.run(cmd, check=True)
+                except: return None
+        elif fs_type == "ext4":
+            try:
+                self.logger.info(f"[{self.label}] Using Extractor for ext4 partition {part_name}")
+                extractor = Extractor()
+                # Extractor.main handles both extraction and config generation
+                extractor.main(str(img_path), str(target_dir))
+            except Exception as e:
+                self.logger.error(f"EXT4 extraction failed via Extractor: {e}")
+                # Fallback to 7z
+                try:
+                    import subprocess
+                    cmd = ["7z", "x", str(img_path), f"-o{self.extracted_dir}", "-y"]
+                    subprocess.run(cmd, check=True)
+                except: return None
+        else:
+            # Unknown filesystem, try 7z as last resort
+            self.logger.warning(f"[{self.label}] Unknown filesystem {fs_type} for {part_name}, trying 7z")
             try:
                 import subprocess
                 cmd = ["7z", "x", str(img_path), f"-o{self.extracted_dir}", "-y"]
                 subprocess.run(cmd, check=True)
-            except Exception as e2:
-                self.logger.warning(f"Failed to extract {part_name}: {e2}")
+            except Exception as e:
+                self.logger.error(f"Final extraction attempt failed for {part_name}: {e}")
                 return None
 
-        # 4. [Critical] Process config files (fs_config / file_contexts)
-        # Move generated config files to self.config_dir for unified management
-        # Rename for standardization as tools might generate different names
+        # 5. [Critical] Process config files (fs_config / file_contexts)
+        # Move generated config files to self.config_dir if they were not already placed there
+        # Extractor.main already places them in self.config_dir (which is its self.CONFING_DIR)
         
         # Find potentially generated context files
         possible_contexts = list(target_dir.parent.glob(f"{part_name}*_file_contexts")) + \
@@ -412,17 +452,21 @@ class RomPackage:
         possible_fs_config = list(target_dir.parent.glob(f"{part_name}*_fs_config")) + \
                              list(target_dir.glob("*_fs_config"))
 
-        if possible_contexts:
-            src = possible_contexts[0]
+        for src in possible_contexts:
             dst = self.config_dir / f"{part_name}_file_contexts"
-            shutil.move(src, dst)
-            self.logger.debug(f"Saved file_contexts for {part_name}")
+            if src.resolve() != dst.resolve():
+                if dst.exists(): dst.unlink()
+                shutil.move(src, dst)
+                self.logger.debug(f"Saved file_contexts for {part_name}")
+                break
 
-        if possible_fs_config:
-            src = possible_fs_config[0]
+        for src in possible_fs_config:
             dst = self.config_dir / f"{part_name}_fs_config"
-            shutil.move(src, dst)
-            self.logger.debug(f"Saved fs_config for {part_name}")
+            if src.resolve() != dst.resolve():
+                if dst.exists(): dst.unlink()
+                shutil.move(src, dst)
+                self.logger.debug(f"Saved fs_config for {part_name}")
+                break
 
         return target_dir
 
