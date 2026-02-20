@@ -27,6 +27,19 @@ A Python-based porting tool for ColorOS, created by Gemini CLI.
     - `SmaliPatcher`: Decompiles and patches `services.jar` and `framework.jar`.
 - **Advanced Repacking**: Supports packing partitions as EROFS or EXT4, and generating `super.img` or OTA `payload.bin`.
 
+## 📱 Supported Devices
+
+This tool is designed to theoretically support Qualcomm Snapdragon chips beyond **SM8250**.
+
+**Currently Expected Supported Models:**
+-   **OnePlus SM8250 Series**: OnePlus 8, OnePlus 8 Pro, OnePlus 8T
+-   **Oppo Find X3** (SM8350)
+-   **OnePlus SM8350 Series**: OnePlus 9, OnePlus 9 Pro
+
+**Important Note for ColorOS 16:**
+ColorOS 16 requires specific kernel support. Please ensure your device's kernel is compatible if attempting to port ColorOS 16.
+
+
 ## 🚀 Getting Started
 
 This section will guide you on how to set up and run the tool.
