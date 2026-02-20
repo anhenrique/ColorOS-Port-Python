@@ -13,6 +13,7 @@ class Config:
         self.reusabe_partition_list = config_data.get("reusabe_partition_list", [])
         self.system_dlkm_enabled = config_data.get("system_dlkm_enabled", False)
         self.vendor_dlkm_enabled = config_data.get("vendor_dlkm_enabled", False)
+        self.assets_base_url = config_data.get("assets_base_url", "https://github.com/toraidl/ColorOS-Port-Python/releases/download/assets")
 
     @classmethod
     def load(cls, device_code=None):

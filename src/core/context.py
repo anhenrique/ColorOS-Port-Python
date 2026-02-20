@@ -6,6 +6,7 @@ from src.core.config import Config
 from src.core.rom import RomPackage
 from src.core.tools import ToolManager
 from src.utils.shell import Shell
+from src.utils.assets import AssetManager
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,8 @@ class Context:
         self.work_dir = Path(work_dir).resolve()
         self.device_code = device_code
         self.stock_rom_code = device_code
+
+        self.assets = AssetManager(self.config.assets_base_url)
         
         # ROM properties (will be populated by fetch_rom_info)
         self.base_android_version = None

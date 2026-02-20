@@ -203,8 +203,9 @@ class SystemModifier:
         source_zip = Path(rule["source"])
         target_base_dir = self.ctx.work_dir / rule.get("target_base_dir", "") 
 
-        if not source_zip.exists():
-            self.logger.warning(f"Override ZIP not found: {source_zip}, skipping.")
+        # Ensure asset exists (download if missing)
+        if not self.ctx.assets.ensure_asset(source_zip):
+            self.logger.warning(f"Override ZIP not found and download failed: {source_zip}, skipping.")
             return
 
         self.logger.info(f"  Unzipping '{source_zip.name}' to '{target_base_dir}'")
@@ -838,7 +839,7 @@ class SystemModifier:
         
         # Try to extract dolby_fix.zip from devices/common if exists
         dolby_zip = Path("devices/common/dolby_fix.zip")
-        if dolby_zip.exists():
+        if self.ctx.assets.ensure_asset(dolby_zip):
             try:
                 with zipfile.ZipFile(dolby_zip, 'r') as z:
                     z.extractall(target)
@@ -858,7 +859,7 @@ class SystemModifier:
         regionmark = getattr(self.ctx, 'regionmark', 'CN')
         
         if regionmark == "CN":
-            if ai_memory_zip.exists():
+            if self.ctx.assets.ensure_asset(ai_memory_zip):
                 try:
                     with zipfile.ZipFile(ai_memory_zip, 'r') as z:
                         z.extractall(target)
@@ -866,7 +867,7 @@ class SystemModifier:
                 except Exception as e:
                     self.logger.warning(f"Failed to extract ai_memory.zip: {e}")
         else:
-            if ai_memory_in_zip.exists():
+            if self.ctx.assets.ensure_asset(ai_memory_in_zip):
                 try:
                     with zipfile.ZipFile(ai_memory_in_zip, 'r') as z:
                         z.extractall(target)
@@ -1351,7 +1352,7 @@ class FrameworkModifier:
         self.shell.run_java_jar(self.apkeditor_path, ["d", "-f", "-i", str(jar), "-o", str(wd), "-no-dex-debug"])
 
         props_hook_zip = Path("devices/common/PropsHook.zip")
-        if props_hook_zip.exists():
+        if self.ctx.assets.ensure_asset(props_hook_zip):
             self.logger.info("Injecting PropsHook...")
             hook_tmp = self.temp_dir / "PropsHook"
             with zipfile.ZipFile(props_hook_zip, 'r') as z:
@@ -1398,7 +1399,7 @@ class FrameworkModifier:
         self._run_smalikit(path=str(wd), iname="ApkSignatureVerifier.smali", method="getMinimumSignatureSchemeVersionForTargetSdk", remake=self.RETRUN_TRUE)
 
         pif_zip = Path("devices/common/pif_patch.zip")
-        if pif_zip.exists():
+        if self.ctx.assets.ensure_asset(pif_zip):
             self._apply_pif_patch(wd, pif_zip)
         else:
             self.logger.warning("pif_patch.zip not found, skipping PIF injection.")
@@ -1699,7 +1700,7 @@ class FrameworkModifier:
 
     def _inject_xeu_toolbox(self):
         xeu_zip = Path("devices/common/xeutoolbox.zip")
-        if not xeu_zip.exists():
+        if not self.ctx.assets.ensure_asset(xeu_zip):
             return
 
         self.logger.info("Injecting Xiaomi.eu Toolbox...")
