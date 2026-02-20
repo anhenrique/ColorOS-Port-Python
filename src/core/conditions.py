@@ -165,12 +165,26 @@ class CompositeConditionStrategy(ConditionStrategy):
             return not self._evaluate_condition(condition["not"], ctx)
         
         # Android version range
-        if "android_version" in condition:
-            av_cond = condition["android_version"]
+        if "android_version" in condition or "base_android_version" in condition:
+            av_cond = condition.get("android_version") or condition.get("base_android_version")
             if isinstance(av_cond, dict):
                 min_v = av_cond.get("min")
                 max_v = av_cond.get("max")
                 current = int(ctx.base_android_version)
+                
+                if min_v is not None and current < min_v:
+                    return False
+                if max_v is not None and current > max_v:
+                    return False
+                return True
+
+        # Port Android version range
+        if "port_android_version" in condition:
+            av_cond = condition["port_android_version"]
+            if isinstance(av_cond, dict):
+                min_v = av_cond.get("min")
+                max_v = av_cond.get("max")
+                current = int(ctx.port_android_version)
                 
                 if min_v is not None and current < min_v:
                     return False

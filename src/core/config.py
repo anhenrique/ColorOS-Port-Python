@@ -25,7 +25,11 @@ class Config:
             config_data = json.load(f)
 
         if device_code:
-            device_config_path = Path(f"devices/{device_code}/port_config.json")
+            # Check both devices/target/{code} and devices/{code} for compatibility
+            device_config_path = Path(f"devices/target/{device_code}/port_config.json")
+            if not device_config_path.exists():
+                device_config_path = Path(f"devices/{device_code}/port_config.json")
+            
             if device_config_path.exists():
                 with open(device_config_path, 'r') as f:
                     device_data = json.load(f)

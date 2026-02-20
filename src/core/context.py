@@ -94,11 +94,15 @@ class Context:
         self.base_product_name = baserom.get_prop("ro.product.name")
         self.base_product_model = baserom.get_prop("ro.product.model")
         
-        base_device_code = baserom.get_prop("ro.oplus.version.my_manifest")
-        if base_device_code:
-            self.base_device_code = base_device_code.split('_')[0].upper()
+        # Priority: ro.product.device (as requested by user for consistency)
+        if self.base_product_device:
+            self.base_device_code = self.base_product_device.upper()
         else:
-            self.base_device_code = self.base_product_device.upper() if self.base_product_device else "UNKNOWN"
+            base_device_code = baserom.get_prop("ro.oplus.version.my_manifest")
+            if base_device_code:
+                self.base_device_code = base_device_code.split('_')[0].upper()
+            else:
+                self.base_device_code = "UNKNOWN"
         
         self.base_vendor_brand = baserom.get_prop("ro.product.vendor.brand")
         

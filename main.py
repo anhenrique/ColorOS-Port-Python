@@ -138,12 +138,12 @@ def main():
         sys.exit(1)
     
     # 2. Refined Device Code Detection (After Extraction)
-    # Priority: ro.product.model (most accurate for display/config)
+    # Priority: ro.product.device (most accurate for config layering)
     if not device_code or device_code == "common":
         # Ensure we have parsed props
-        model = baserom.get_prop("ro.product.model")
-        if model:
-            device_code = model.strip().replace(" ", "").upper()
+        device = baserom.get_prop("ro.product.device")
+        if device:
+            device_code = device.strip().replace(" ", "").upper()
             logger.info(f"Refined device code from build.prop: {device_code}")
         
         # If successfully detected or changed, reload config
