@@ -2,7 +2,7 @@
 
 # ColorOS Port Python
 
-A Python-based porting tool for ColorOS, created by Gemini CLI.
+A Python-based porting tool for ColorOS, created with AI Large Language Models (Gemini, Qwen, etc.).
 
 </div>
 
@@ -26,6 +26,7 @@ A Python-based porting tool for ColorOS, created by Gemini CLI.
     - `PropertyModifier`: Automatically syncs properties between Base and Port ROMs.
     - `SmaliPatcher`: Decompiles and patches `services.jar` and `framework.jar`.
 - **Advanced Repacking**: Supports packing partitions as EROFS or EXT4, and generating `super.img` or OTA `payload.bin`.
+- **Enhanced Configuration Framework**: New validation, flexible conditions, and dependency management.
 
 ## 📱 Supported Devices
 
@@ -85,7 +86,7 @@ Using Docker is the recommended way to run this tool. It creates a self-containe
     ```bash
     chmod +x -R bin/linux/x86_64/
     ```
-    
+
 3.  **Run the script:**
     - **Basic Usage:**
         ```bash
@@ -112,6 +113,276 @@ The project uses a powerful three-layer inheritance system for ROM modifications
 3.  **Target Layer (`devices/target/<DEVICE>/`)**: Device-specific hardware patches.
 
 > See the `devices` directory for examples like `features.json` and `replacements.json`.
+
+---
+
+## 📖 Enhanced Configuration Framework Guide
+
+The new framework provides powerful features for defining device-specific modifications with validation, flexible conditions, and dependency management.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Configuration Layers                      │
+├─────────────────────────────────────────────────────────────┤
+│  Common Layer    →  Chipset Layer   →   Target Layer        │
+│  (All devices)      (SM8250/8350)       (Specific device)   │
+└─────────────────────────────────────────────────────────────┘
+         ↓                    ↓                      ↓
+         └────────────────────┴──────────────────────┘
+                              ↓
+                    Merged Configuration
+                              ↓
+              ┌───────────────────────────────┐
+              │   New Framework Components    │
+              ├───────────────────────────────┤
+              │  • Schema Validation          │
+              │  • Condition Evaluation       │
+              │  • Dependency Resolution      │
+              │  • Merge Strategies           │
+              └───────────────────────────────┘
+```
+
+### 1. JSON Schema Validation
+
+All configuration files are automatically validated against defined schemas to catch errors early.
+
+**Supported Config Files:**
+- `replacements.json` - File replacement rules
+- `features.json` - Feature flags and build properties
+- `port_config.json` - Port configuration settings
+
+**Example Validation Error:**
+```
+✗ devices/target/DEVICE/replacements.json
+  - [1:5] Missing required field 'type'
+  - [3:10] Unknown field 'condtion' (did you mean 'condition'?)
+```
+
+### 2. Composite Conditions
+
+Replace simple boolean flags with powerful composite conditions using `and`, `or`, `not` operators.
+
+#### Condition Types
+
+| Condition | Description | Example |
+|-----------|-------------|---------|
+| `android_version` | Base Android version range | `{"min": 13, "max": 14}` |
+| `port_android_version` | Port ROM Android version | `{"min": 15, "max": 15}` |
+| `rom_type` | ROM type check | `"ColorOS"`, `"OxygenOS"` |
+| `rom_version` | ROM version matching | `{"contains": "16.0.1"}` |
+| `region` | Region check | `"CN"`, `"Global"` |
+| `file_exists` | File existence check | `"path/to/file.zip"` |
+| `target_exists` | Target path exists | `true` |
+
+#### Legacy Format (Still Supported)
+```json
+{
+  "condition_android_version": 13,
+  "condition_port_is_coloros": true
+}
+```
+
+#### New Composite Format
+```json
+{
+  "condition": {
+    "and": [
+      {"rom_type": "ColorOS"},
+      {"port_android_version": {"min": 15, "max": 15}},
+      {"region": "CN"}
+    ]
+  }
+}
+```
+
+#### Advanced Examples
+
+**Multiple ROM Types (OR):**
+```json
+{
+  "condition": {
+    "or": [
+      {"rom_type": "ColorOS"},
+      {"rom_type": "OxygenOS"}
+    ]
+  }
+}
+```
+
+**Exclude Region (NOT):**
+```json
+{
+  "condition": {
+    "and": [
+      {"port_android_version": {"min": 16, "max": 16}},
+      {"not": {"region": "CN"}}
+    ]
+  }
+}
+```
+
+**Version Range:**
+```json
+{
+  "condition": {
+    "android_version": {"min": 13, "max": 14}
+  }
+}
+```
+
+### 3. Dependency Management
+
+Rules can declare dependencies to ensure correct execution order.
+
+```json
+{
+  "replacements": [
+    {
+      "id": "ril_fix_sm8350",
+      "description": "RIL Fix for SM8350",
+      "type": "unzip_override",
+      "source": "devices/common/ril_fix_sm8350.zip"
+    },
+    {
+      "id": "aon_fix_sm8350",
+      "description": "AON Fix for SM8350",
+      "type": "unzip_override",
+      "source": "devices/common/aon_fix_sm8350.zip",
+      "depends_on": ["ril_fix_sm8350"]
+    }
+  ]
+}
+```
+
+**Benefits:**
+- Automatic topological sorting
+- Circular dependency detection
+- Clear error messages
+
+### 4. Merge Strategies
+
+Control how configurations are merged across layers.
+
+#### Strategies
+
+| Strategy | Behavior | Use Case |
+|----------|----------|----------|
+| `append` (default) | Add new items, deduplicate | Most cases |
+| `override` | Replace parent entirely | Device-specific override |
+| `remove` | Remove from parent | Disable inherited rule |
+
+#### Examples
+
+**Override Parent Configuration:**
+```json
+{
+  "replacements": [
+    {
+      "description": "Custom Camera Fix",
+      "merge_strategy": "override",
+      "type": "unzip_override",
+      "source": "devices/target/MYDEVICE/camera_custom.zip"
+    }
+  ]
+}
+```
+
+**Remove Inherited Rule:**
+```json
+{
+  "replacements": [
+    {
+      "merge_strategy": "remove",
+      "remove_by_description": "Stock NFC Fix"
+    }
+  ]
+}
+```
+
+### 5. Complete Example
+
+```json
+{
+  "replacements": [
+    {
+      "id": "camera_fix_group",
+      "description": "Camera Fix for ColorOS 15",
+      "type": "unzip_override_group",
+      "condition": {
+        "and": [
+          {"rom_type": "ColorOS"},
+          {"port_android_version": {"min": 15, "max": 15}},
+          {"file_exists": "devices/target/MYDEVICE/camera_fix.zip"}
+        ]
+      },
+      "operations": [
+        {
+          "id": "camera_framework",
+          "description": "Camera Framework",
+          "type": "unzip_override",
+          "source": "devices/target/MYDEVICE/camera_fix.zip",
+          "target_base_dir": "build/target/",
+          "removes": [
+            "my_product/app/OplusCamera",
+            "my_product/product_overlay/framework/com.oplus.camera.*.jar"
+          ],
+          "build_props": {
+            "my_product": {
+              "ro.vendor.oplus.camera.isSupportLumo": "1"
+            }
+          }
+        },
+        {
+          "id": "camera_odm",
+          "description": "ODM Files",
+          "type": "unzip_override",
+          "source": "devices/target/MYDEVICE/camera_odm.zip",
+          "target_base_dir": "build/target/"
+        }
+      ]
+    }
+  ]
+}
+```
+
+### 6. Validation and Debugging
+
+#### Validate All Configs
+```bash
+python3 -c "
+from src.core.config_schema import validate_all_configs
+results = validate_all_configs('devices')
+for path, (valid, errors) in results.items():
+    status = '✓' if valid else '✗'
+    print(f'{status} {path}')
+"
+```
+
+#### Test Condition Evaluation
+```bash
+python3 -c "
+from src.core.conditions import ConditionEvaluator, BuildContext
+evaluator = ConditionEvaluator()
+ctx = BuildContext()
+ctx.base_android_version = 13
+ctx.portIsColorOS = True
+
+rule = {'condition': {'android_version': {'min': 13, 'max': 13}}}
+print(f'Condition passes: {evaluator.evaluate(rule, ctx)}')
+"
+```
+
+#### Merge Report
+The framework generates detailed reports during config loading:
+```
+[INFO] Config 'replacements.json' loaded from 3 layer(s)
+[DEBUG] Config 'replacements.json' missing (expected): 0 file(s)
+[INFO] Applied 12 override rules, skipped 5
+```
+
+---
 
 ## ⚠️ Disclaimer
 
