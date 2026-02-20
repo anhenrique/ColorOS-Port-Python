@@ -361,24 +361,28 @@ class SystemModifier:
             return
 
         self.logger.info("Processing file replacements...")
-        
+
         stock_root = self.ctx.stock.extracted_dir
         target_root = self.ctx.target_dir
-        
+
         # Pre-scan target directory for fast recursive lookups
         target_index = self._build_target_index(target_root)
+
+        # Build condition context and create evaluator
+        cond_ctx = self._build_condition_context()
+        evaluator = ConditionEvaluator()
 
         def _handle_copy_op(src_item, target_item, rel_name):
             self.logger.info(f"  Replacing/Adding: {rel_name}")
             if not target_item.parent.exists():
                 target_item.parent.mkdir(parents=True, exist_ok=True)
-                
+
             if target_item.exists():
                 if target_item.is_dir():
                     shutil.rmtree(target_item)
                 else:
                     target_item.unlink()
-            
+
             if src_item.is_dir():
                 shutil.copytree(src_item, target_item, symlinks=True, dirs_exist_ok=True)
             else:
@@ -394,7 +398,11 @@ class SystemModifier:
 
         for rule in rules:
             desc = rule.get("description", "Unknown Rule")
-            # ... (rest of the processing logic remains the same)
+
+            # Use enhanced condition evaluator
+            if not evaluator.evaluate(rule, cond_ctx):
+                self.logger.debug(f"Skipping rule '{desc}': conditions not met")
+                continue
 
             rtype = rule.get("type", "file")
             search_path = rule.get("search_path", "")
