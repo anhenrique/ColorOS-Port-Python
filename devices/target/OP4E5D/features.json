@@ -1,6 +1,6 @@
 {
     "app_feature": [
-        "os.charge.settings.wirelesscharging.power^设置显示无线充电瓦数^args="int:30"",
+        "os.charge.settings.wirelesscharging.power^设置显示无线充电瓦数^args=\"int:30\"",
         "oplus.power.wirelesschgwhenwired.support",
         "com.oplus.battery.wireless.charging.notificate",
         "os.charge.settings.wirelesschargingcoil.position",

@@ -16,6 +16,11 @@ import subprocess
 
 from src.utils.smalikit import SmaliKit
 
+# New imports for enhanced config handling
+from src.core.config_schema import ConfigValidator, validate_config
+from src.core.conditions import ConditionEvaluator, BuildContext
+from src.core.config_merger import ConfigMerger, MergeReport
+
 class SmaliArgs:
     def __init__(self, **kwargs):
         self.path = None
@@ -87,7 +92,13 @@ class SystemModifier:
     def _apply_override_zips(self):
         """
         Applies ZIP overrides and file removals based on replacements.json,
-        supporting conditional execution (e.g., based on Android version or chipset).
+        supporting conditional execution with enhanced condition evaluation.
+        
+        Supports:
+        - Simple conditions (legacy compatibility)
+        - Composite conditions (and/or/not)
+        - Dependency resolution between rules
+        - Detailed failure reporting
         """
         rules_config = self._load_merged_config("replacements.json")
         if not rules_config:
@@ -96,82 +107,74 @@ class SystemModifier:
         override_rules = rules_config.get("replacements", [])
         if not override_rules:
             return
-        
+
+        # Resolve dependencies between rules
+        try:
+            merger = ConfigMerger()
+            override_rules = merger.resolve_dependencies(override_rules)
+        except Exception as e:
+            self.logger.warning(f"Dependency resolution warning: {e}")
+
         self.logger.info("Applying ZIP overrides and file removals...")
+        
+        # Build condition context
+        cond_ctx = self._build_condition_context()
+        evaluator = ConditionEvaluator()
+
+        applied_count = 0
+        skipped_count = 0
 
         for rule in override_rules:
             rule_type = rule.get("type")
             description = rule.get("description", "Unnamed override")
 
-            # --- Advanced Conditions ---
-            
-            # ROM Type Conditions
-            if rule.get("condition_port_is_coloros") and not self.ctx.portIsColorOS: continue
-            if rule.get("condition_port_is_coloros_global") and not self.ctx.portIsColorOSGlobal: continue
-            if rule.get("condition_port_is_oos") and not self.ctx.portIsOOS: continue
-
-            # Port Android Version (e.g., 16)
-            cond_port_v = rule.get("condition_port_android_version")
-            if cond_port_v and int(self.ctx.port_android_version) != cond_port_v:
+            # Use enhanced condition evaluator
+            if not evaluator.evaluate(rule, cond_ctx):
+                self.logger.debug(f"Skipping rule '{description}': conditions not met")
+                skipped_count += 1
                 continue
 
-            # Base Android Version Less Than (e.g., < 15)
-            cond_base_lt = rule.get("condition_base_android_version_lt")
-            if cond_base_lt and int(self.ctx.base_android_version) >= cond_base_lt:
-                continue
-
-            # RegionMark (e.g., "CN")
-            cond_region = rule.get("condition_regionmark")
-            if cond_region:
-                # Handle lists or single string
-                allowed_regions = [cond_region] if isinstance(cond_region, str) else cond_region
-                if self.ctx.base_regionmark not in allowed_regions:
-                    continue
-            
-            # Not RegionMark (e.g., != "CN")
-            cond_not_region = rule.get("condition_not_regionmark")
-            if cond_not_region:
-                if self.ctx.base_regionmark == cond_not_region:
-                    continue
-
-            # Port ROM Version (e.g., "16.0.1")
-            cond_port_rom_v = rule.get("condition_port_rom_version")
-            if cond_port_rom_v and cond_port_rom_v not in str(self.ctx.port_oplusrom_version):
-                continue
-
-            # Base Android version condition (legacy)
-            condition_android_version = rule.get("condition_android_version")
-            if condition_android_version and int(self.ctx.base_android_version) != condition_android_version:
-                continue
+            self.logger.info(f"Applying: {description}")
 
             if rule_type == "unzip_override":
                 self._execute_unzip_override(rule)
+                applied_count += 1
             elif rule_type == "remove_files":
                 self._execute_remove_files(rule)
+                applied_count += 1
             elif rule_type == "copy_file_internal":
                 self._execute_copy_file_internal(rule)
+                applied_count += 1
             elif rule_type == "unzip_override_group":
                 self.logger.info(f"Processing override group: {description}")
+                group_applied = 0
+                
                 for op in rule.get("operations", []):
-                    # Check nested conditions if needed
-                    # For brevity, recursive condition checking can be added if groups become complex
                     op_type = op.get("type")
                     
-                    # Apply regionmark condition inside group if present
-                    inner_region = op.get("condition_regionmark")
-                    if inner_region and self.ctx.base_regionmark != inner_region: continue
+                    # Evaluate nested conditions
+                    if not evaluator.evaluate(op, cond_ctx):
+                        op_desc = op.get("description", "unnamed operation")
+                        self.logger.debug(f"  Skipping operation '{op_desc}': conditions not met")
+                        continue
                     
-                    inner_not_region = op.get("condition_not_regionmark")
-                    if inner_not_region and self.ctx.base_regionmark == inner_not_region: continue
-
                     if op_type == "unzip_override":
                         self._execute_unzip_override(op)
+                        group_applied += 1
                     elif op_type == "remove_files":
                         self._execute_remove_files(op)
+                        group_applied += 1
                     elif op_type == "copy_file_internal":
                         self._execute_copy_file_internal(op)
+                        group_applied += 1
+                    else:
+                        self.logger.debug(f"  Skipping unknown operation type: {op_type}")
+                
+                applied_count += group_applied
             else:
                 self.logger.debug(f"Skipping unknown override rule type: {rule_type}")
+
+        self.logger.info(f"Applied {applied_count} override rules, skipped {skipped_count}")
 
 
     def _execute_copy_file_internal(self, rule):
@@ -271,7 +274,7 @@ class SystemModifier:
         return index
 
     def _deep_merge(self, base: dict | list, extra: dict | list):
-        """Recursively merges extra into base."""
+        """Recursively merges extra into base. (Legacy method, kept for compatibility)"""
         if isinstance(base, dict) and isinstance(extra, dict):
             for key, value in extra.items():
                 if key in base and isinstance(base[key], (dict, list)) and isinstance(value, (dict, list)):
@@ -279,42 +282,74 @@ class SystemModifier:
                 else:
                     base[key] = value
         elif isinstance(base, list) and isinstance(extra, list):
-            # For lists, we append new items if they are not already there (simple de-duplication)
             for item in extra:
                 if item not in base:
                     base.append(item)
         return base
 
     def _load_merged_config(self, filename: str):
-        """Load and merge config from Common -> Chipset -> Target layers"""
-        config = {}
-        
-        # 1. Common Layer
+        """
+        Load and merge config from Common -> Chipset -> Target layers.
+        Enhanced with validation, detailed reporting, and improved error handling.
+        """
+        # Build paths for hierarchical config loading
         paths = [Path("devices/common") / filename]
-        
-        # 2. Chipset Layer (e.g., devices/chipset/OPSM8250)
+
         if hasattr(self.ctx, "base_chipset_family") and self.ctx.base_chipset_family != "unknown":
             paths.append(Path(f"devices/chipset/{self.ctx.base_chipset_family}") / filename)
-        
-        # 3. Target Layer (e.g., devices/target/OP60F5L1)
+
         if hasattr(self.ctx, "base_device_code") and self.ctx.base_device_code:
             device_id = self.ctx.base_device_code.upper()
             paths.append(Path(f"devices/target/{device_id}") / filename)
 
-        for p in paths:
-            if p.exists():
-                try:
-                    with open(p, 'r') as f:
-                        data = json.load(f)
-                        if not config:
-                            config = data
-                        else:
-                            self._deep_merge(config, data)
-                    self.logger.info(f"Loaded and merged config from {p}")
-                except Exception as e:
-                    self.logger.error(f"Failed to load config {p}: {e}")
-        
+        # Use enhanced ConfigMerger
+        merger = ConfigMerger(logger=self.logger)
+        config, report = merger.load_and_merge(paths, filename)
+
+        # Log merge report
+        if report.loaded_files:
+            self.logger.info(f"Config '{filename}' loaded from {len(report.loaded_files)} layer(s)")
+        if report.missing_files:
+            self.logger.debug(f"Config '{filename}' missing (expected): {len(report.missing_files)} file(s)")
+        if report.warnings:
+            for warn in report.warnings:
+                self.logger.warning(f"Config '{filename}': {warn}")
+        if report.errors:
+            for err in report.errors:
+                self.logger.error(f"Config '{filename}': {err}")
+
+        # Validate loaded config
+        if config:
+            is_valid, errors = validate_config(str(paths[0]) if paths[0].exists() else filename, config)
+            if not is_valid:
+                for err in errors:
+                    self.logger.warning(f"Config validation warning: {err}")
+
         return config
+
+    def _build_condition_context(self) -> BuildContext:
+        """
+        Build a condition context from the current build context.
+        This bridges the old context attributes to the new condition system.
+        """
+        ctx = BuildContext()
+        
+        # Copy ROM type flags
+        ctx.portIsColorOS = getattr(self.ctx, "portIsColorOS", False)
+        ctx.portIsColorOSGlobal = getattr(self.ctx, "portIsColorOSGlobal", False)
+        ctx.portIsOOS = getattr(self.ctx, "portIsOOS", False)
+        
+        # Copy version info
+        ctx.port_android_version = int(getattr(self.ctx, "port_android_version", 14))
+        ctx.base_android_version = int(getattr(self.ctx, "base_android_version", 14))
+        ctx.port_oplusrom_version = str(getattr(self.ctx, "port_oplusrom_version", ""))
+        
+        # Copy region and chipset info
+        ctx.base_regionmark = str(getattr(self.ctx, "base_regionmark", ""))
+        ctx.base_chipset_family = str(getattr(self.ctx, "base_chipset_family", "unknown"))
+        ctx.base_device_code = str(getattr(self.ctx, "base_device_code", ""))
+        
+        return ctx
 
     def _process_replacements(self):
         """
