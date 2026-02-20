@@ -2,7 +2,7 @@
 
 # ColorOS Port Python
 
-A Python-based porting tool for ColorOS, inspired by the HyperOS-Port-Python project.
+A Python-based porting tool for ColorOS, created by Gemini CLI.
 
 </div>
 

@@ -2,7 +2,7 @@
 
 # ColorOS 移植工具 (Python版)
 
-一个基于 Python 的 ColorOS 移植工具，灵感来源于 HyperOS-Port-Python 项目。
+一个基于 Python 的 ColorOS 移植工具，由 Gemini CLI 制作。
 
 </div>
 
