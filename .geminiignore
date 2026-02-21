@@ -1,0 +1,4 @@
+devices/common/*.zip
+devices/common/*.img
+devices/target/**/*.zip
+devices/target/**/*.img

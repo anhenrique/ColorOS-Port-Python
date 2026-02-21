@@ -694,6 +694,12 @@ class Repacker:
         preload_empty = Path("devices/common/my_preload_empty.img")
         company_empty = Path("devices/common/my_company_empty.img")
         
+        # Ensure assets are present
+        if is_ab:
+            if hasattr(self.ctx, "assets"):
+                self.ctx.assets.ensure_asset(preload_empty)
+                self.ctx.assets.ensure_asset(company_empty)
+        
         preload_img = self.images_out / "my_preload.img"
         company_img = self.images_out / "my_company.img"
         
