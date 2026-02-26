@@ -1802,17 +1802,23 @@ class FirmwareModifier:
     def run(self):
         self.logger.info("Starting Firmware Modification...")
         
-        self._patch_vbmeta()
+        if getattr(self.ctx, "disable_vbmeta", False):
+            self._patch_vbmeta()
         
         if getattr(self.ctx, "enable_ksu", False):
-            self._patch_ksu()
+            if getattr(self.ctx, "ksu_type", "gki") == "gki":
+                self._patch_ksu()
+            else:
+                self._patch_non_gki_kernel()
         
         self.logger.info("Firmware Modification Completed.")
 
     def _patch_vbmeta(self):
         self.logger.info("Patching vbmeta images (Disabling AVB)...")
         
-        vbmeta_images = list(self.ctx.target_dir.rglob("vbmeta*.img"))
+        repack_images_dir = self.ctx.work_dir / "repack_images"
+        vbmeta_images = list(repack_images_dir.glob("vbmeta*.img"))
+        vbmeta_images.extend(list(self.ctx.target_dir.rglob("vbmeta*.img")))
         
         if not vbmeta_images:
             self.logger.warning("No vbmeta images found in target directory.")
@@ -1840,8 +1846,8 @@ class FirmwareModifier:
     def _patch_ksu(self):
         self.logger.info("Attempting to patch KernelSU...")
         
-        target_init_boot = self.ctx.target_dir / "repack_images" / "init_boot.img"
-        target_boot = self.ctx.target_dir / "repack_images" / "boot.img"
+        target_init_boot = self.ctx.repack_images_dir / "init_boot.img"
+        target_boot = self.ctx.repack_images_dir / "boot.img"
         
         if not target_init_boot.exists():
             self.logger.warning("init_boot.img not found, skipping KSU patch.")
@@ -1866,6 +1872,97 @@ class FirmwareModifier:
             return
             
         self._apply_ksu_patch(target_init_boot, kmi_version)
+
+    def _patch_non_gki_kernel(self):
+        self.logger.info("Integrating non-GKI custom kernel (AnyKernel)...")
+        device_code = getattr(self.ctx, "device_code", "unknown")
+        device_dir = Path(f"devices/{device_code}")
+        if not device_dir.exists():
+            device_dir = Path(f"devices/target/{device_code}")
+        
+        if not device_dir.exists():
+            self.logger.warning(f"Device directory not found for {device_code}, skipping kernel patch.")
+            return
+
+        # Find kernel zip (KSU or NoKSU)
+        ksu_zips = list(device_dir.glob("*-KSU*.zip"))
+        noksu_zips = list(device_dir.glob("*-NoKSU*.zip"))
+        
+        target_zip = None
+        if ksu_zips:
+            target_zip = ksu_zips[0]
+            self.logger.info(f"Found KSU kernel zip: {target_zip.name}")
+        elif noksu_zips:
+            target_zip = noksu_zips[0]
+            self.logger.info(f"Found NoKSU kernel zip: {target_zip.name}")
+        
+        if not target_zip:
+            self.logger.warning("No custom kernel zip found in device directory.")
+            return
+
+        target_boot = self.ctx.work_dir / "repack_images" / "boot.img"
+        if not target_boot.exists():
+            self.logger.error("boot.img not found in repack_images.")
+            return
+
+        with tempfile.TemporaryDirectory(prefix="anykernel_") as tmp:
+            tmp_path = Path(tmp)
+            ak_path = tmp_path / "anykernel"
+            ak_path.mkdir()
+            
+            with zipfile.ZipFile(target_zip, 'r') as zip_ref:
+                zip_ref.extractall(ak_path)
+            
+            # Find kernel, dtb, dtbo
+            kernel_file = next((f for f in ak_path.glob("*") if f.name.lower() in ["image", "zimage", "kernel", "image.gz", "image.lz4", "boot.img"]), None)
+            dtb_file = next((f for f in ak_path.glob("*") if f.name.lower() in ["dtb", "dtb.img"] or f.suffix.lower() == ".dtb"), None)
+            dtbo_file = next((f for f in ak_path.glob("dtbo.img")), None)
+
+            if not kernel_file:
+                self.logger.error("No kernel image found in zip.")
+                return
+
+            boot_tmp = tmp_path / "boot"
+            boot_tmp.mkdir()
+            shutil.copy(target_boot, boot_tmp / "boot.img")
+            
+            self.shell.run([str(self.ctx.tools.magiskboot), "unpack", "-h", "boot.img"], cwd=boot_tmp)
+            
+            # Replace kernel
+            if kernel_file.name == "boot.img":
+                inner_tmp = tmp_path / "inner"
+                inner_tmp.mkdir()
+                shutil.copy(kernel_file, inner_tmp / "boot.img")
+                self.shell.run([str(self.ctx.tools.magiskboot), "unpack", "-h", "boot.img"], cwd=inner_tmp)
+                if (inner_tmp / "kernel").exists():
+                    shutil.copy(inner_tmp / "kernel", boot_tmp / "kernel")
+                if (inner_tmp / "dtb").exists():
+                    shutil.copy(inner_tmp / "dtb", boot_tmp / "dtb")
+            else:
+                if kernel_file.suffix.lower() == ".gz":
+                    import gzip
+                    with gzip.open(kernel_file, 'rb') as f_in, open(boot_tmp / "kernel", 'wb') as f_out:
+                        shutil.copyfileobj(f_in, f_out)
+                elif kernel_file.suffix.lower() == ".lz4":
+                    self.shell.run(["lz4", "-d", str(kernel_file), str(boot_tmp / "kernel")])
+                else:
+                    shutil.copy(kernel_file, boot_tmp / "kernel")
+
+            if dtb_file:
+                shutil.copy(dtb_file, boot_tmp / "dtb")
+            
+            self.shell.run([str(self.ctx.tools.magiskboot), "repack", "boot.img", "boot_new.img"], cwd=boot_tmp)
+            
+            if (boot_tmp / "boot_new.img").exists():
+                shutil.move(boot_tmp / "boot_new.img", target_boot)
+                self.logger.info("Custom kernel integrated successfully into boot.img")
+            else:
+                self.logger.error("Failed to repack boot.img with custom kernel.")
+
+            if dtbo_file:
+                target_dtbo = self.ctx.work_dir / "repack_images" / "dtbo.img"
+                shutil.copy(dtbo_file, target_dtbo)
+                self.logger.info("Custom dtbo.img integrated.")
 
     def _analyze_kmi(self, boot_img):
         with tempfile.TemporaryDirectory(prefix="ksu_kmi_") as tmp:

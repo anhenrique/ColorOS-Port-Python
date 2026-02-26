@@ -13,6 +13,9 @@ class Config:
         self.reusabe_partition_list = config_data.get("reusabe_partition_list", [])
         self.system_dlkm_enabled = config_data.get("system_dlkm_enabled", False)
         self.vendor_dlkm_enabled = config_data.get("vendor_dlkm_enabled", False)
+        self.enable_ksu = config_data.get("enable_ksu", False)
+        self.ksu_type = config_data.get("ksu_type", "gki")
+        self.disable_vbmeta = config_data.get("disable_vbmeta", False)
         self.assets_base_url = config_data.get("assets_base_url", "https://github.com/toraidl/ColorOS-Port-Python/releases/download/assets")
 
     @classmethod

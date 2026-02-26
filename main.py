@@ -2,16 +2,27 @@ import argparse
 import logging
 import sys
 import re
+import shutil
 from pathlib import Path
 from src.core.config import Config
 from src.core.rom import RomPackage
 from src.core.context import Context
 from src.core.tools import ToolManager
 from src.core.props import PropertyModifier
-from src.core.modifier import SystemModifier, FrameworkModifier
+from src.core.modifier import SystemModifier, FrameworkModifier, FirmwareModifier
 from src.core.packer import Repacker
+from src.utils.progress import timed_stage, get_timer, create_progress_tracker
 
 logger = logging.getLogger(__name__)
+
+# Define logical partitions as a constant
+LOGICAL_PARTITIONS = {
+    "system", "vendor", "product", "system_ext", "odm", "mi_ext",
+    "my_product", "my_manifest", "my_stock", "my_region", "my_carrier",
+    "my_heytap", "my_bigball", "my_engineering", "vendor_dlkm", "odm_dlkm",
+    "system_dlkm", "product_dlkm"
+}
+
 
 def parse_args():
     parser = argparse.ArgumentParser(description="ColorOS Porting Tool")
@@ -67,6 +78,69 @@ def detect_device_code(rom_path: str, args_device_code: str | None = None) -> st
     # Priority 3: Fallback (original script default: op8t)
     return None
 
+def copy_firmware_images(baserom: RomPackage, repack_images_dir: Path) -> int:
+    """Copy firmware images from baserom to repack_images directory.
+    
+    Returns:
+        Number of images copied
+    """
+    logger.info("Copying baserom firmware images...")
+    
+    # Get list of firmware images
+    fw_images = list(baserom.images_dir.glob("*.img"))
+    
+    if not fw_images:
+        logger.warning("No firmware images found in baserom images directory")
+        return 0
+    
+    # Create progress tracker
+    tracker = create_progress_tracker(
+        total=len(fw_images),
+        description="Copying firmware",
+        unit="images"
+    )
+    
+    copied_count = 0
+    for fw_img in fw_images:
+        try:
+            part_name = fw_img.stem.replace("_a", "").replace("_b", "")
+            
+            if part_name in LOGICAL_PARTITIONS:
+                tracker.update(message=f"Skipped {fw_img.name} (logical partition)")
+                continue
+            
+            dest = repack_images_dir / fw_img.name
+            shutil.copy2(fw_img, dest)
+            copied_count += 1
+            tracker.update(message=f"Copied {fw_img.name}")
+        except Exception as e:
+            logger.error(f"Failed to copy {fw_img.name}: {e}")
+            tracker.update(message=f"Failed {fw_img.name}: {e}")
+    
+    tracker.finish()
+    return copied_count
+
+def extract_baserom_partitions(baserom: RomPackage, partitions: list[str]):
+    """Extract baserom partitions with progress tracking."""
+    tracker = create_progress_tracker(
+        total=len(partitions),
+        description="Extracting BaseROM partitions",
+        unit="partitions"
+    )
+    
+    for part in partitions:
+        try:
+            result = baserom.extract_partition_to_file(part)
+            if result:
+                tracker.update(message=f"Extracted {part}")
+            else:
+                tracker.update(message=f"Skipped {part} (not found)")
+        except Exception as e:
+            logger.warning(f"Failed to extract {part}: {e}")
+            tracker.update(message=f"Failed {part}: {e}")
+    
+    tracker.finish()
+
 def main():
     args = parse_args()
     work_dir = Path(args.work_dir).resolve()
@@ -74,129 +148,130 @@ def main():
     # Setup logging based on debug flag and work_dir
     setup_logging(work_dir, args.debug)
     
-    # 1. Initial Device Code Detection (Filename/Args)
-    device_code = detect_device_code(args.baserom, args.device_code)
+    # Reset and get global timer
+    from src.utils.progress import reset_timer
+    reset_timer()
+    timer = get_timer()
     
-    # Load configuration
     try:
-        config = Config.load(device_code)
-        logger.info(f"Loaded configuration for device: {device_code if device_code else 'common (initial)'}")
-    except Exception as e:
-        logger.error(f"Failed to load configuration: {e}")
-        sys.exit(1)
-
-    # Initialize Tools
-    tools = ToolManager(Path("bin").resolve())
-
-    # Initialize ROM Packages
-    logger.info("Initializing ROM packages...")
-    baserom = RomPackage(args.baserom, work_dir / "baserom", "BaseROM")
-    portrom = RomPackage(args.portrom, work_dir / "portrom", "PortROM")
-
-    # Extract ROMs
-    try:
-        # Base ROM needs all partitions (including firmware)
-        baserom.extract_images()
-        
-        # Create repack_images directory before copying
-        repack_images_dir = work_dir / "repack_images"
-        repack_images_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Copy firmware images from baserom to repack_images (exclude logical partitions)
-        logger.info("Copying baserom firmware images...")
-        
-        logical_partitions = {"system", "vendor", "product", "system_ext", "odm", "mi_ext", 
-                             "my_product", "my_manifest", "my_stock", "my_region", "my_carrier",
-                             "my_heytap", "my_bigball", "my_engineering", "vendor_dlkm", "odm_dlkm", 
-                             "system_dlkm", "product_dlkm"}
-        
-        copied_count = 0
-        for fw_img in baserom.images_dir.glob("*.img"):
-            part_name = fw_img.stem.replace("_a", "").replace("_b", "")
+        with timed_stage("Initialization"):
+            # 1. Initial Device Code Detection (Filename/Args)
+            device_code = detect_device_code(args.baserom, args.device_code)
             
-            if part_name in logical_partitions:
-                continue
-            
-            dest = repack_images_dir / fw_img.name
-            import shutil
-            shutil.copy2(fw_img, dest)
-            logger.debug(f"Copied {fw_img.name} to repack_images")
-            copied_count += 1
-        
-        logger.info(f"Copied {copied_count} firmware images to repack_images")
-        
-        # Port ROM only needs specific partitions from config
-        portrom_partitions = config.partition_to_port
-        portrom.extract_images(portrom_partitions)
-        
-        # Also extract baserom partitions needed for props reading
-        baserom_partitions = ["system", "product", "system_ext", "my_product", "my_manifest"]
-        for part in baserom_partitions:
-            baserom.extract_partition_to_file(part)
-    except Exception as e:
-        logger.error(f"Failed to extract ROMs: {e}")
-        sys.exit(1)
-    
-    # 2. Refined Device Code Detection (After Extraction)
-    # Priority: ro.product.device (most accurate for config layering)
-    if not device_code or device_code == "common":
-        # Ensure we have parsed props
-        device = baserom.get_prop("ro.product.device")
-        if device:
-            device_code = device.strip().replace(" ", "").upper()
-            logger.info(f"Refined device code from build.prop: {device_code}")
-        
-        # If successfully detected or changed, reload config
-        if device_code:
+            # Load configuration
             try:
                 config = Config.load(device_code)
-                logger.info(f"Reloaded configuration for detected device: {device_code}")
+                logger.info(f"Loaded configuration for device: {device_code if device_code else 'common (initial)'}")
             except Exception as e:
-                logger.warning(f"No specific config for {device_code}, continuing with current config.")
+                logger.error(f"Failed to load configuration: {e}")
+                sys.exit(1)
 
-    # Initialize Context with finalized config
-    logger.info("Initializing Porting Context...")
-    # Pass device_code to Context
-    ctx = Context(config, baserom, portrom, work_dir, device_code) 
-    
-    # Stage 1: Install Partitions
-    logger.info("Starting Stage 1: Partition Installation...")
-    ctx.install_partitions()
-    
-    # Export build.prop for debugging (after partitions are extracted)
-    logger.info("Exporting build.prop for debugging...")
-    baserom.export_props(work_dir / "build_props" / "baserom_build.prop")
-    portrom.export_props(work_dir / "build_props" / "portrom_build.prop")
-    
-    # Stage 2: Property Modification
-    logger.info("Starting Stage 2: Property Modification...")
-    prop_modifier = PropertyModifier(ctx)
-    prop_modifier.run()
+            # Initialize Tools
+            tools = ToolManager(Path("bin").resolve())
 
-    # Stage 3: Smali Patching
-    logger.info("Starting Stage 3: Smali Patching...")
-    system_modifier = SystemModifier(ctx)
-    system_modifier.run()
-    framework_modifier = FrameworkModifier(ctx)
-    framework_modifier.run()
+            # Initialize ROM Packages
+            logger.info("Initializing ROM packages...")
+            baserom = RomPackage(args.baserom, work_dir / "baserom", "BaseROM")
+            portrom = RomPackage(args.portrom, work_dir / "portrom", "PortROM")
 
-    # Stage 4: Repacking
-    logger.info("Starting Stage 4: Repacking...")
-    packer = Repacker(ctx)
-    
-    # Determine pack format
-    pack_type = args.pack_type.upper()
-    if pack_type == "SUPER":
-        packer.pack_all(pack_type="EROFS", is_rw=False)
-        packer.pack_super_image()
-        logger.info("Super image packing complete.")
-    else:
-        # Payload format (OTA)
-        packer.pack_all(pack_type="EROFS", is_rw=False)
-        packer.pack_ota_payload()
-        logger.info("OTA payload packing complete.")
+        with timed_stage("ROM Extraction"):
+            # Extract ROMs
+            try:
+                # Base ROM needs all partitions (including firmware)
+                baserom.extract_images()
+                
+                # Create repack_images directory before copying
+                repack_images_dir = work_dir / "repack_images"
+                repack_images_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Copy firmware images from baserom to repack_images
+                copied_count = copy_firmware_images(baserom, repack_images_dir)
+                logger.info(f"Copied {copied_count} firmware images to repack_images")
+                
+                # Port ROM only needs specific partitions from config
+                portrom_partitions = config.partition_to_port
+                portrom.extract_images(portrom_partitions)
+                
+                # Also extract baserom partitions needed for props reading
+                baserom_partitions = ["system", "product", "system_ext", "my_product", "my_manifest"]
+                extract_baserom_partitions(baserom, baserom_partitions)
+                
+            except Exception as e:
+                logger.error(f"Failed to extract ROMs: {e}")
+                sys.exit(1)
+        
+        with timed_stage("Device Detection & Context Setup"):
+            # 2. Refined Device Code Detection (After Extraction)
+            if not device_code or device_code == "common":
+                device = baserom.get_prop("ro.product.device")
+                if device:
+                    device_code = device.strip().replace(" ", "").upper()
+                    logger.info(f"Refined device code from build.prop: {device_code}")
+                
+                if device_code:
+                    try:
+                        config = Config.load(device_code)
+                        logger.info(f"Reloaded configuration for detected device: {device_code}")
+                    except Exception as e:
+                        logger.warning(f"No specific config for {device_code}, continuing with current config.")
 
-    logger.info("Porting process (Stage 1-4) complete.")
+            # Initialize Context with finalized config
+            logger.info("Initializing Porting Context...")
+            ctx = Context(config, baserom, portrom, work_dir, device_code)
+        
+        with timed_stage("Stage 1: Partition Installation"):
+            logger.info("Starting Stage 1: Partition Installation...")
+            ctx.install_partitions()
+        
+        with timed_stage("Export Build Props"):
+            logger.info("Exporting build.prop for debugging...")
+            baserom.export_props(work_dir / "build_props" / "baserom_build.prop")
+            portrom.export_props(work_dir / "build_props" / "portrom_build.prop")
+        
+        with timed_stage("Stage 2: Property Modification"):
+            logger.info("Starting Stage 2: Property Modification...")
+            prop_modifier = PropertyModifier(ctx)
+            prop_modifier.run()
+
+        with timed_stage("Stage 3: Smali Patching"):
+            logger.info("Starting Stage 3: Smali Patching...")
+            system_modifier = SystemModifier(ctx)
+            system_modifier.run()
+            framework_modifier = FrameworkModifier(ctx)
+            framework_modifier.run()
+
+        with timed_stage("Stage 3.5: Firmware Modification"):
+            logger.info("Starting Stage 3.5: Firmware Modification (KSU/VBMeta)...")
+            fw_modifier = FirmwareModifier(ctx)
+            fw_modifier.run()
+
+        with timed_stage("Stage 4: Repacking"):
+            logger.info("Starting Stage 4: Repacking...")
+            packer = Repacker(ctx)
+            
+            pack_type = args.pack_type.upper()
+            if pack_type == "SUPER":
+                packer.pack_all(pack_type="EROFS", is_rw=False)
+                packer.pack_super_image()
+                logger.info("Super image packing complete.")
+            else:
+                packer.pack_all(pack_type="EROFS", is_rw=False)
+                packer.pack_ota_payload()
+                logger.info("OTA payload packing complete.")
+
+        logger.info("Porting process (Stage 1-4) complete.")
+        
+        # Print performance summary
+        timer.print_summary()
+        
+    except KeyboardInterrupt:
+        logger.warning("Process interrupted by user")
+        timer.print_summary()
+        sys.exit(130)
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}", exc_info=True)
+        timer.print_summary()
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
