@@ -1,2 +1,3 @@
 # This file is intentionally left empty.
 # This project does not have any external Python dependencies.
+psutil>=5.9.0
