@@ -1,19 +1,18 @@
 {
     "oplus_feature": [
-        "oplus.software.directservice.finger_flashnotes_enable^小布记忆",
-        "oplus.software.support_quick_launchapp",
-        "oplus.software.support_blockable_animation",
-        "oplus.software.support.zoom.multi_mode",
+        "oplus.software.directservice.finger_flashnotes_enable^小布记忆", 
+        "oplus.software.support_quick_launchapp",  
+        "oplus.software.support_blockable_animation", 
+        "oplus.software.support.zoom.multi_mode", 
         "oplus.software.display.reduce_white_point^降低白点值",
         "oplus.software.audio.media_control",
         "oplus.software.support.zoom.open_wechat_mimi_program",
         "oplus.software.support.zoom.center_exit",
-        "oplus.software.support.zoom.game_enter",
+        "oplus.software.support.zoom.game_enter", 
         "oplus.software.coolex.support",
         "oplus.software.display.game.dapr_enable",
         "oplus.software.display.eyeprotect_game_support",
-        "oplus.software.multi_app.volume.adjust.support^多音量调节",
-        "oplus.software.systemui.navbar_pick_color^15.0.2.201新增",
+        "oplus.software.multi_app.volume.adjust.support^多音量调节（A13机型没有）", 
         "oplus.software.string_gc_support",
         "oplus.software.display.rgb_ball_support^色温调节球",
         "oplus.software.camera_volume_quick_launch",
@@ -28,7 +27,7 @@
         "oplus.software.display.game_dark_eyeprotect_support^游戏助手夜晚护眼",
         "oplus.software.systemui.navbar_pick_color^小横条拾取颜色优化",
         "oplus.software.smart_sidebar_video_assistant^侧边栏视频助手",
-        "oplus.video.audio.volume.enhancement^视频音量增强",
+        "oplus.video.audio.volume.enhancement^视频音量增强", 
         "oplus.software.display.lux_small_debounce_expand_support",
         "oplus.hardware.display.no_bright_eyes_low_freq_strobe^低亮度屏闪",
         "oplus.software.audio.super_volume_4x^400%超级音量",
@@ -42,7 +41,16 @@
         "oplus.software.systemui.pin_task^钉到流体云",
         "oplus.software.radio.hfp_comm_shared_support^iPhone互联",
         "oplus.hardware.display.motion_sickness^晕动舒缓提示",
-        "oplus.software.radio.networkless_support^无网畅聊"
+        "oplus.software.radio.nwpower_amc_special_sim",
+        "oplus.software.radio.mdlog_buffer_qdss_enable"
+    ],
+    "oplus_feature_conditional": [
+        {
+            "feature": "oplus.software.radio.networkless_support^无网畅聊",
+            "condition": {
+                "base_android_version": {"min": 15}
+            }
+        }
     ],
     "app_feature": [
         "os.personalization.flip.agile_window.enable",
@@ -105,12 +113,32 @@
         "com.oplus.persona.card_datamining_support^^args=\"boolean:true\"",
         "os.graphic.gallery.collage.livephoto^^args=\"boolean:true\"",
         "com.android.systemui.qs_deform_enable^^args=\"boolean:true\"",
-        "com.oplus.wallpapers.ai_camera_movement^^args=\"boolean:true\"",
         "com.oplus.wallpapers.livephoto_wallpaper_support_hdr^^args=\"boolean:true\"",
         "com.oplus.wallpapers.livephoto_wallpaper_support_4k^^args=\"boolean:true\"",
         "com.oplus.gallery3d.aihd_support",
         "os.graphic.gallery.collage.asset_bounds_break^出圈^args=\"boolean:true\"",
-        "os.graphic.gallery.collage.livephoto^^args=\"boolean:true\""
+        "os.graphic.gallery.collage.livephoto^^args=\"boolean:true\"",
+        "com.oplus.wallpapers.3d_wallpaper^3D壁纸^args=\"boolean:true\"",
+        "com.oplus.aipaint^^args=\"boolean:true\"",
+        "com.oplus.aipaint.function_switch^^args=\"boolean:true\"",
+        "com.oplus.setting.ai.action.SETTING_ENTRANCE",
+        "com.oplus.rom.ai_notification_summary_support"
+    ],
+    "app_feature_conditional": [
+        {
+            "feature": "com.oplus.wallpapers.ai_camera_movement^^args=\"boolean:true\"",
+            "condition": {
+                "rom_version": {"contains": "16.0.1"}
+            }
+        },
+        {
+            "feature": "com.oplus.wallpapers.ai_camera_movement_for_products_before_15^^args=\"boolean:true\"",
+            "condition": {
+                "not": {
+                    "rom_version": {"contains": "16.0.1"}
+                }
+            }
+        }
     ],
     "permission_oplus_feature": [
         "oplus.software.game.cold.start.speedup.enable"
@@ -125,12 +153,57 @@
         "oplus.software.display.refreshrate_default_smart"
     ],
     "features_remove": [
-        "oplus.power.wirelesschgwhenwired.support",
-        "com.oplus.battery.wireless.charging.notificate",
-        "os.charge.settings.wirelesscharge.support",
-        "os.charge.settings.wirelesscharging.power",
-        "os.charge.settings.wirelesschargingcoil.position",
-        "oplus.power.onwirelesscharger.support"
+        "oplus.software.display.wcg_2.0_support",
+        "oplus.software.display.origin_roundcorner_support",
+        "oplus.software.vibration_ring_mute",
+        "oplus.software.vibration_alarm_clock",
+        "oplus.software.vibration_ringtone",
+        "oplus.software.vibration_threestage_key",
+        "oppo.common.support.curved.display",
+        "oplus.feature.largescreen",
+        "oplus.feature.largescreen.land",
+        "oplus.software.audio.audioeffect_support",
+        "oplus.software.audio.audiox_support",
+        "oppo.breeno.three.words.support",
+        "oplus.software.vibrator_qcom_lmvibrator",
+        "oplus.hardware.vibrator_style_switch",
+        "oplus.software.vibrator_luxunvibrator",
+        "oplus.software.palmprint_non_unify",
+        "oplus.software.palmprint_v1",
+        "oplus.software.palmprint",
+        "com.android.settings.processor_detail_gen2",
+        "com.android.settings.processor_detail",
+        "oplus.software.display.adfr_v32_hp",
+        "com.oplus.battery.phoneusage.screenon.hide",
+        "android.hardware.telephony.euicc",
+        "oplus.software.radio.esim_support_sn220u",
+        "oplus.software.radio.esim_support",
+        "com.android.systemui.keyguard_support_esimcard",
+        "oplus.software.aon_sensorhub_enable"
+    ],
+    "features_remove_force": [],
+    "features_remove_conditional": [
+        {
+            "features": [
+                "oplus.power.wirelesschgwhenwired.support",
+                "com.oplus.battery.wireless.charging.notificate",
+                "os.charge.settings.wirelesscharge.support",
+                "os.charge.settings.wirelesscharging.power",
+                "os.charge.settings.wirelesschargingcoil.position",
+                "oplus.power.onwirelesscharger.support"
+            ],
+            "condition": {
+                "and": [
+                    {"not": {"base_product_device": "OnePlus9Pro"}},
+                    {"not": {"base_product_device": "OP4E3F"}},
+                    {
+                        "not": {
+                            "base_product_device": "OP4E5D"
+                        }
+                    }
+                ]
+            }
+        }
     ],
     "build_props": {
         "odm": {

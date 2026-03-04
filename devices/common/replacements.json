@@ -95,7 +95,7 @@
             "condition": {
                 "and": [
                     {"port_android_version": {"min": 16, "max": 16}},
-                    {"base_android_version": {"max": 14}}
+                    {"base_android_version": {"max": 15}}
                 ]
             },
             "files": ["system_ext/priv-app/com.qualcomm.location"]
@@ -154,6 +154,28 @@
             "condition": {
                 "target_exists": true
             }
+        },
+        {
+            "id": "copy_multimedia_xml",
+            "description": "Copy Multimedia XML files from baserom",
+            "type": "copy_files_from_stock",
+            "source": "my_product/etc/Multimedia_*.xml",
+            "target_dir": "my_product/etc/"
+        },
+        {
+            "id": "conditional_copy_sys_graphic_enhancement",
+            "description": "Copy sys_graphic_enhancement_config.json if exists in baserom",
+            "type": "conditional_copy",
+            "source": "my_product/etc/extension/sys_graphic_enhancement_config.json",
+            "target": "my_product/etc/extension/sys_graphic_enhancement_config.json"
+        },
+        {
+            "id": "sync_overlay_files",
+            "description": "Sync overlay files from baserom",
+            "type": "overlay_sync",
+            "copy_vendor": true,
+            "remove_patterns": ["*display*[0-9]*.apk"],
+            "overlay_pattern": "*{my_product_type}*.apk"
         }
     ]
 }

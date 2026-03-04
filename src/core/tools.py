@@ -37,6 +37,7 @@ class ToolManager:
         logger.info(f"Platform tools path: {self.platform_bin}")
 
     def get_tool(self, tool_name: str) -> str:
+        """Get tool path by name. Returns string path."""
         # Search priority: 
         # 1. bin/linux/x86_64/tool_name
         # 2. bin/apktool/tool_name
@@ -59,5 +60,13 @@ class ToolManager:
             
         logger.warning(f"Tool {tool_name} not found in project binaries or system PATH.")
         return tool_name  # Return bare name and hope for the best
+
+    def __getattr__(self, name: str) -> Path:
+        """Allow accessing tools as attributes, e.g., tools.magiskboot"""
+        tool_path_str = self.get_tool(name)
+        tool_path = Path(tool_path_str)
+        # Store as attribute for faster subsequent access
+        setattr(self, name, tool_path)
+        return tool_path
 
 # Singleton instance placeholder - will be initialized in Context
