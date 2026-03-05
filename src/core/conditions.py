@@ -13,25 +13,32 @@ class BuildContext:
     Context object containing build-time information for condition evaluation.
     This is a simplified interface - actual implementation may vary.
     """
+
     def __init__(self):
-        # ROM type flags
-        self.portIsColorOS: bool = False
-        self.portIsColorOSGlobal: bool = False
-        self.portIsOOS: bool = False
-        
+        # ROM type flags (port)
+        self.port_is_coloros: bool = False
+        self.port_is_coloros_global: bool = False
+        self.port_is_oos: bool = False
+
+        # ROM type flags (base)
+        self.base_is_coloros: bool = False
+        self.base_is_coloros_cn: bool = False
+        self.base_is_coloros_global: bool = False
+        self.base_is_oos: bool = False
+
         # Version information
         self.port_android_version: int = 0
         self.base_android_version: int = 0
         self.port_oplusrom_version: str = ""
-        
+
         # Region and chipset info
         self.base_regionmark: str = ""
         self.base_chipset_family: str = ""
         self.base_device_code: str = ""
-        
+
         # File existence cache
         self._file_cache: Dict[str, bool] = {}
-    
+
     def file_exists(self, path: str) -> bool:
         """Check if a file exists with caching."""
         if path not in self._file_cache:
@@ -41,16 +48,16 @@ class BuildContext:
 
 class ConditionStrategy(ABC):
     """Abstract base class for condition strategies."""
-    
+
     @abstractmethod
     def check(self, rule: Dict[str, Any], ctx: BuildContext) -> bool:
         """
         Evaluate the condition against the build context.
-        
+
         Args:
             rule: The rule dictionary containing condition data
             ctx: Build context with runtime information
-        
+
         Returns:
             True if condition passes, False otherwise
         """
@@ -65,60 +72,67 @@ class SimpleConditionStrategy(ConditionStrategy):
     - condition_regionmark
     etc.
     """
-    
+
     def check(self, rule: Dict[str, Any], ctx: BuildContext) -> bool:
         # ROM Type Conditions
-        if rule.get("condition_port_is_coloros") and not ctx.portIsColorOS:
+        if rule.get("condition_port_is_coloros") and not ctx.port_is_coloros:
             return False
-        if rule.get("condition_port_is_coloros_global") and not ctx.portIsColorOSGlobal:
+        if (
+            rule.get("condition_port_is_coloros_global")
+            and not ctx.port_is_coloros_global
+        ):
             return False
-        if rule.get("condition_port_is_oos") and not ctx.portIsOOS:
+        if rule.get("condition_port_is_oos") and not ctx.port_is_oos:
             return False
-        
+
         # Port Android Version (exact match)
         cond_port_v = rule.get("condition_port_android_version")
         if cond_port_v is not None and int(ctx.port_android_version) != cond_port_v:
             return False
-        
+
         # Base Android Version Less Than
         cond_base_lt = rule.get("condition_base_android_version_lt")
         if cond_base_lt is not None and int(ctx.base_android_version) >= cond_base_lt:
             return False
-        
+
         # Base Android Version Greater Than or Equal
         cond_base_gte = rule.get("condition_base_android_version_gte")
         if cond_base_gte is not None and int(ctx.base_android_version) < cond_base_gte:
             return False
-        
+
         # RegionMark (supports single string or list)
         cond_region = rule.get("condition_regionmark")
         if cond_region is not None:
-            allowed_regions = [cond_region] if isinstance(cond_region, str) else cond_region
+            allowed_regions = (
+                [cond_region] if isinstance(cond_region, str) else cond_region
+            )
             if ctx.base_regionmark not in allowed_regions:
                 return False
-        
+
         # Not RegionMark
         cond_not_region = rule.get("condition_not_regionmark")
         if cond_not_region is not None and ctx.base_regionmark == cond_not_region:
             return False
-        
+
         # Port ROM Version
         cond_port_rom_v = rule.get("condition_port_rom_version")
-        if cond_port_rom_v is not None and cond_port_rom_v not in str(ctx.port_oplusrom_version):
+        if cond_port_rom_v is not None and cond_port_rom_v not in str(
+            ctx.port_oplusrom_version
+        ):
             return False
-        
+
         # File existence condition
         cond_file = rule.get("condition_file_exists")
         if cond_file is not None and not ctx.file_exists(cond_file):
             return False
-        
+
         # Target exists condition
         cond_target = rule.get("condition_target_exists")
         if cond_target is True:
             # This requires additional context about target files
             # For now, we'll skip this check if not provided
             pass
-        
+
         return True
 
 
@@ -131,47 +145,49 @@ class CompositeConditionStrategy(ConditionStrategy):
         "not": cond
     }
     """
-    
+
     def __init__(self, simple_strategy: Optional[ConditionStrategy] = None):
         self.simple_strategy = simple_strategy or SimpleConditionStrategy()
-    
+
     def check(self, rule: Dict[str, Any], ctx: BuildContext) -> bool:
         condition = rule.get("condition")
         if condition is None:
             # Fall back to simple conditions
             return self.simple_strategy.check(rule, ctx)
-        
+
         return self._evaluate_condition(condition, ctx)
-    
+
     def _evaluate_condition(self, condition: Dict[str, Any], ctx: BuildContext) -> bool:
         """Recursively evaluate a condition object."""
-        
+
         # AND operator - all conditions must pass
         if "and" in condition:
             conditions = condition["and"]
             if not isinstance(conditions, list):
                 return False
             return all(self._evaluate_condition(c, ctx) for c in conditions)
-        
+
         # OR operator - at least one condition must pass
         if "or" in condition:
             conditions = condition["or"]
             if not isinstance(conditions, list):
                 return False
             return any(self._evaluate_condition(c, ctx) for c in conditions)
-        
+
         # NOT operator - condition must fail
         if "not" in condition:
             return not self._evaluate_condition(condition["not"], ctx)
-        
+
         # Android version range
         if "android_version" in condition or "base_android_version" in condition:
-            av_cond = condition.get("android_version") or condition.get("base_android_version")
+            av_cond = condition.get("android_version") or condition.get(
+                "base_android_version"
+            )
             if isinstance(av_cond, dict):
                 min_v = av_cond.get("min")
                 max_v = av_cond.get("max")
                 current = int(ctx.base_android_version)
-                
+
                 if min_v is not None and current < min_v:
                     return False
                 if max_v is not None and current > max_v:
@@ -185,13 +201,13 @@ class CompositeConditionStrategy(ConditionStrategy):
                 min_v = av_cond.get("min")
                 max_v = av_cond.get("max")
                 current = int(ctx.port_android_version)
-                
+
                 if min_v is not None and current < min_v:
                     return False
                 if max_v is not None and current > max_v:
                     return False
                 return True
-        
+
         # Region condition
         if "region" in condition:
             region_cond = condition["region"]
@@ -199,22 +215,46 @@ class CompositeConditionStrategy(ConditionStrategy):
                 return ctx.base_regionmark == region_cond
             elif isinstance(region_cond, list):
                 return ctx.base_regionmark in region_cond
-        
+
         # ROM type condition
         if "rom_type" in condition:
             rom_type = condition["rom_type"]
             if rom_type == "ColorOS":
-                return ctx.portIsColorOS
+                return ctx.port_is_coloros
             elif rom_type == "ColorOS_Global":
-                return ctx.portIsColorOSGlobal
+                return ctx.port_is_coloros_global
             elif rom_type == "OxygenOS":
-                return ctx.portIsOOS
-        
+                return ctx.port_is_oos
+
+        # Base ROM type condition
+        if "base_rom_type" in condition:
+            base_rom_type = condition["base_rom_type"]
+            if base_rom_type == "ColorOS":
+                return getattr(ctx, "base_is_coloros", False) or getattr(
+                    ctx, "base_is_coloros_cn", False
+                )
+            elif base_rom_type == "ColorOSCN":
+                return getattr(ctx, "base_is_coloros_cn", False)
+            elif base_rom_type == "ColorOS_Global":
+                return getattr(ctx, "base_is_coloros_global", False)
+            elif base_rom_type == "OxygenOS":
+                return getattr(ctx, "base_is_oos", False)
+
+        # Port ROM type condition
+        if "port_rom_type" in condition:
+            port_rom_type = condition["port_rom_type"]
+            if port_rom_type == "ColorOS":
+                return ctx.port_is_coloros
+            elif port_rom_type == "ColorOS_Global":
+                return ctx.port_is_coloros_global
+            elif port_rom_type == "OxygenOS":
+                return ctx.port_is_oos
+
         # ROM version comparison
         if "rom_version" in condition:
             rom_cond = condition["rom_version"]
             current_rom = str(ctx.port_oplusrom_version)
-            
+
             if isinstance(rom_cond, dict):
                 # Support operators: eq, ne, contains, starts_with, ends_with
                 if "eq" in rom_cond and current_rom != rom_cond["eq"]:
@@ -223,17 +263,21 @@ class CompositeConditionStrategy(ConditionStrategy):
                     return False
                 if "contains" in rom_cond and rom_cond["contains"] not in current_rom:
                     return False
-                if "starts_with" in rom_cond and not current_rom.startswith(rom_cond["starts_with"]):
+                if "starts_with" in rom_cond and not current_rom.startswith(
+                    rom_cond["starts_with"]
+                ):
                     return False
-                if "ends_with" in rom_cond and not current_rom.endswith(rom_cond["ends_with"]):
+                if "ends_with" in rom_cond and not current_rom.endswith(
+                    rom_cond["ends_with"]
+                ):
                     return False
             elif isinstance(rom_cond, str):
                 return rom_cond in current_rom
-        
+
         # File exists condition
         if "file_exists" in condition:
             return ctx.file_exists(condition["file_exists"])
-        
+
         # Unknown condition type - default to pass with warning
         # (Could be logged in a real implementation)
         return True
@@ -244,39 +288,39 @@ class ConditionEvaluator:
     Main entry point for condition evaluation.
     Combines simple and composite strategies.
     """
-    
+
     def __init__(self):
         self.simple_strategy = SimpleConditionStrategy()
         self.composite_strategy = CompositeConditionStrategy(self.simple_strategy)
-    
+
     def evaluate(self, rule: Dict[str, Any], ctx: BuildContext) -> bool:
         """
         Evaluate all conditions in a rule.
-        
+
         Args:
             rule: Rule dictionary containing conditions
             ctx: Build context
-        
+
         Returns:
             True if all conditions pass, False otherwise
         """
         # Use composite strategy which handles both simple and composite conditions
         return self.composite_strategy.check(rule, ctx)
-    
+
     def evaluate_with_reason(self, rule: Dict[str, Any], ctx: BuildContext) -> tuple:
         """
         Evaluate conditions and return reason for failure.
-        
+
         Args:
             rule: Rule dictionary containing conditions
             ctx: Build context
-        
+
         Returns:
             Tuple of (passed: bool, reason: str)
         """
         condition = rule.get("condition")
         description = rule.get("description", "Unnamed rule")
-        
+
         if condition is None:
             # Use simple strategy
             passed = self.simple_strategy.check(rule, ctx)
@@ -284,41 +328,52 @@ class ConditionEvaluator:
                 return True, f"Rule '{description}' passed"
             else:
                 return False, f"Rule '{description}' failed simple condition check"
-        
+
         # For composite conditions, provide more detailed feedback
         result = self._evaluate_with_detail(condition, ctx, description)
         return result
-    
-    def _evaluate_with_detail(self, condition: Dict[str, Any], ctx: BuildContext, 
-                               description: str, depth: int = 0) -> tuple:
+
+    def _evaluate_with_detail(
+        self,
+        condition: Dict[str, Any],
+        ctx: BuildContext,
+        description: str,
+        depth: int = 0,
+    ) -> tuple:
         """Recursively evaluate with detailed failure reasons."""
         indent = "  " * depth
-        
+
         if "and" in condition:
             conditions = condition["and"]
             for i, c in enumerate(conditions):
-                result, reason = self._evaluate_with_detail(c, ctx, description, depth + 1)
+                result, reason = self._evaluate_with_detail(
+                    c, ctx, description, depth + 1
+                )
                 if not result:
                     return False, f"{indent}AND condition [{i}] failed: {reason}"
             return True, f"{indent}All AND conditions passed"
-        
+
         if "or" in condition:
             conditions = condition["or"]
             reasons = []
             for i, c in enumerate(conditions):
-                result, reason = self._evaluate_with_detail(c, ctx, description, depth + 1)
+                result, reason = self._evaluate_with_detail(
+                    c, ctx, description, depth + 1
+                )
                 if result:
                     return True, f"{indent}OR condition [{i}] passed"
                 reasons.append(reason)
             return False, f"{indent}All OR conditions failed: {'; '.join(reasons)}"
-        
+
         if "not" in condition:
-            result, reason = self._evaluate_with_detail(condition["not"], ctx, description, depth + 1)
+            result, reason = self._evaluate_with_detail(
+                condition["not"], ctx, description, depth + 1
+            )
             if result:
                 return False, f"{indent}NOT condition failed (inner condition passed)"
             else:
                 return True, f"{indent}NOT condition passed (inner condition failed)"
-        
+
         # Simple condition - just evaluate
         # Create a pseudo-rule for the simple strategy
         pseudo_rule = {"condition": condition}
@@ -333,11 +388,11 @@ class ConditionEvaluator:
 def check_conditions(rule: Dict[str, Any], ctx: BuildContext) -> bool:
     """
     Check if a rule's conditions are satisfied.
-    
+
     Args:
         rule: Rule dictionary
         ctx: Build context
-    
+
     Returns:
         True if conditions pass, False otherwise
     """
@@ -348,11 +403,11 @@ def check_conditions(rule: Dict[str, Any], ctx: BuildContext) -> bool:
 def check_conditions_verbose(rule: Dict[str, Any], ctx: BuildContext) -> tuple:
     """
     Check conditions with detailed failure reason.
-    
+
     Args:
         rule: Rule dictionary
         ctx: Build context
-    
+
     Returns:
         Tuple of (passed, reason)
     """

@@ -63,10 +63,10 @@ class Context:
         self.port_brand = None
         self.target_display_id = None
 
-        self.portIsRealmeUI = False
-        self.portIsColorOSGlobal = False
-        self.portIsOOS = False
-        self.portIsColorOS = True
+        self.port_is_realme_ui = False
+        self.port_is_coloros_global = False
+        self.port_is_oos = False
+        self.port_is_coloros = True
 
         # Configuration properties
         self.enable_ksu = config.enable_ksu
@@ -175,13 +175,13 @@ class Context:
         self.port_oplusrom_version = portrom.get_prop("ro.build.version.oplusrom")
 
         # ROM type detection
-        self.portIsRealmeUI = self.port_brand == "realme"
-        self.portIsColorOSGlobal = (
+        self.port_is_realme_ui = self.port_brand == "realme"
+        self.port_is_coloros_global = (
             self.port_area == "gdpr" and self.port_brand != "oneplus"
         )
-        self.portIsOOS = self.port_area == "gdpr" and self.port_brand == "oneplus"
-        self.portIsColorOS = not (
-            self.portIsColorOSGlobal or self.portIsOOS or self.portIsRealmeUI
+        self.port_is_oos = self.port_area == "gdpr" and self.port_brand == "oneplus"
+        self.port_is_coloros = not (
+            self.port_is_coloros_global or self.port_is_oos or self.port_is_realme_ui
         )
 
         # Security patch
