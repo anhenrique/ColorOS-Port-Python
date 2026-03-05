@@ -912,6 +912,7 @@ class Repacker:
     def _generate_meta_info(self):
         """Generate ab_partitions.txt, dynamic_partitions_info.txt, misc_info.txt"""
         self.logger.info("Generating META info...")
+        is_ab = self.ctx.is_ab_device
 
         # --- ab_partitions.txt ---
         ab_txt = self.meta_out / "ab_partitions.txt"
@@ -956,15 +957,29 @@ class Repacker:
             f.write(f"super_partition_groups=qti_dynamic_partitions\n")
             f.write(f"super_qti_dynamic_partitions_group_size={group_size}\n")
             f.write(f"super_qti_dynamic_partitions_partition_list={super_parts_str}\n")
-            f.write(f"virtual_ab=true\n")
-            f.write(f"virtual_ab_compression=true\n")
+            if is_ab:
+                f.write(f"virtual_ab=true\n")
+                f.write(f"virtual_ab_compression=true\n")
 
         # --- misc_info.txt ---
         misc_txt = self.meta_out / "misc_info.txt"
         with open(misc_txt, "w") as f:
             f.write("recovery_api_version=3\n")
             f.write("fstab_version=2\n")
-            f.write("ab_update=true\n")
+            if is_ab:
+                f.write("ab_update=true\n")
+            else:
+                # A-only specific config
+                f.write("blockimgdiff_versions=3,4\n")
+                f.write("use_dynamic_partitions=true\n")
+                f.write(f"dynamic_partition_list={super_parts_str}\n")
+                f.write("super_partition_groups=qti_dynamic_partitions\n")
+                f.write(f"super_qti_dynamic_partitions_group_size={super_size}\n")
+                f.write(
+                    f"super_qti_dynamic_partitions_partition_list={super_parts_str}\n"
+                )
+                f.write("board_uses_vendorimage=true\n")
+                f.write("cache_size=402653184\n")
             # Specify the key path for ota_from_target_files
             f.write(
                 "default_system_dev_certificate=build/make/target/product/security/testkey\n"
@@ -975,6 +990,10 @@ class Repacker:
         with open(ue_txt, "w") as f:
             f.write("PAYLOAD_MAJOR_VERSION=2\n")
             f.write("PAYLOAD_MINOR_VERSION=8\n")
+
+        # --- A-only specific setup ---
+        if not is_ab:
+            self._setup_a_only_ota_structure(partition_list)
 
     def _copy_build_props(self):
         """Copy build.prop of each partition to directories required by META structure - port.sh logic"""
@@ -1129,3 +1148,139 @@ class Repacker:
         self.logger.info(f"No specific match found, using default size: {default_size}")
 
         return default_size
+
+    def _setup_a_only_ota_structure(self, partition_list):
+        """
+        Setup A-only specific OTA structure:
+        - OTA/bin/updater
+        - MY_PRODUCT, MY_BIGBALL, MY_CARRIER, etc directories
+        - RECOVERY/RAMDISK/etc/recovery.fstab
+        - releasetools.py
+        - firmware-update handling
+        """
+        self.logger.info("Setting up A-only OTA structure...")
+
+        # 1. Create OTA/bin directory and copy updater
+        ota_bin = self.product_out / "OTA" / "bin"
+        ota_bin.mkdir(parents=True, exist_ok=True)
+
+        updater_src = Path(f"devices/{self.ctx.stock_rom_code}/OTA/bin/updater")
+        updater_dst = ota_bin / "updater"
+
+        if updater_src.exists():
+            shutil.copy2(updater_src, updater_dst)
+            self.logger.info(f"Copied custom updater from {updater_src}")
+        else:
+            default_updater = Path("devices/common/non-ab/OTA/updater")
+            if default_updater.exists():
+                shutil.copy2(default_updater, updater_dst)
+                self.logger.info("Copied default A-only updater")
+            else:
+                self.logger.warning("Default A-only updater not found")
+
+        # 2. Create ColorOS specific partition directories
+        a_only_parts = [
+            "MY_PRODUCT",
+            "MY_BIGBALL",
+            "MY_CARRIER",
+            "MY_ENGINEERING",
+            "MY_HEYTAP",
+            "MY_MANIFEST",
+            "MY_REGION",
+            "MY_STOCK",
+        ]
+        for part in a_only_parts:
+            (self.product_out / part).mkdir(exist_ok=True)
+
+        # 3. Setup RECOVERY/RAMDISK/etc/recovery.fstab
+        recovery_etc = self.product_out / "RECOVERY" / "RAMDISK" / "etc"
+        recovery_etc.mkdir(parents=True, exist_ok=True)
+
+        fstab_src = Path(f"devices/{self.ctx.stock_rom_code}/recovery.fstab")
+        fstab_dst = recovery_etc / "recovery.fstab"
+
+        if fstab_src.exists():
+            shutil.copy2(fstab_src, fstab_dst)
+        else:
+            default_fstab = Path("devices/common/recovery.fstab")
+            if default_fstab.exists():
+                shutil.copy2(default_fstab, fstab_dst)
+                self.logger.info("Copied default recovery.fstab")
+
+        # 4. Copy releasetools.py
+        releasetools_src = Path(f"devices/{self.ctx.stock_rom_code}/releasetools.py")
+        releasetools_dst = self.meta_out / "releasetools.py"
+
+        if releasetools_src.exists():
+            shutil.copy2(releasetools_src, releasetools_dst)
+        else:
+            default_releasetools = Path("devices/common/releasetools.py")
+            if default_releasetools.exists():
+                shutil.copy2(default_releasetools, releasetools_dst)
+                self.logger.info("Copied default releasetools.py")
+
+        # 5. Handle firmware-update from baserom
+        self._handle_a_only_firmware()
+
+    def _handle_a_only_firmware(self):
+        """
+        Handle firmware-update directory for A-only devices.
+        Port.sh logic:
+        1. If build/baserom/firmware-update exists, copy it
+        2. Otherwise, find .elf/.mdn/.bin files and move to firmware-update
+        3. Copy boot.img, dtbo.img, vbmeta.img to appropriate locations
+        4. Handle storage-fw and ffu_tool
+        """
+        self.logger.info("Handling A-only firmware files...")
+
+        firmware_out = self.product_out / "firmware-update"
+        firmware_out.mkdir(parents=True, exist_ok=True)
+
+        # Get baserom work directory (RomPackage.work_dir)
+        baserom_work_dir = (
+            self.ctx.baserom.work_dir if hasattr(self.ctx, "baserom") else None
+        )
+
+        if baserom_work_dir and baserom_work_dir.exists():
+            # 1. Check for firmware-update directory
+            baserom_fw = baserom_work_dir / "firmware-update"
+            if baserom_fw.exists() and baserom_fw.is_dir():
+                shutil.copytree(baserom_fw, firmware_out, dirs_exist_ok=True)
+                self.logger.info(f"Copied firmware-update from {baserom_fw}")
+            else:
+                self.logger.info(
+                    "No firmware-update directory found, searching for firmware files..."
+                )
+
+                for pattern in ["*.elf", "*.mdn", "*.bin"]:
+                    for fw_file in baserom_work_dir.rglob(pattern):
+                        if fw_file.is_file():
+                            dest = firmware_out / fw_file.name
+                            if not dest.exists():
+                                shutil.copy2(fw_file, dest)
+                                self.logger.info(f"Copied firmware: {fw_file.name}")
+
+            # 2. Copy specific images to firmware-update
+            baserom_images = baserom_work_dir / "images"
+            if baserom_images.exists():
+                for img_name in ["dtbo.img", "vbmeta.img", "vbmeta_system.img"]:
+                    src = baserom_images / img_name
+                    if src.exists():
+                        shutil.copy2(src, firmware_out / img_name)
+                        self.logger.info(f"Copied {img_name} to firmware-update")
+
+            # 3. Handle storage-fw and ffu_tool
+            storage_fw = baserom_work_dir / "storage-fw"
+            if storage_fw.exists():
+                storage_out = self.product_out / "storage-fw"
+                shutil.copytree(storage_fw, storage_out, dirs_exist_ok=True)
+
+                ffu_tool = baserom_work_dir / "ffu_tool"
+                if ffu_tool.exists():
+                    shutil.copy2(ffu_tool, storage_out / "ffu_tool")
+                    self.logger.info("Copied ffu_tool to storage-fw")
+            else:
+                ffu_tool = baserom_work_dir / "ffu_tool"
+                if ffu_tool.exists():
+                    shutil.copy2(ffu_tool, self.product_out / "ffu_tool")
+                    self.logger.info("Copied ffu_tool")
