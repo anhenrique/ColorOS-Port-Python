@@ -814,6 +814,39 @@ class Repacker:
             new_content = parts[0] + marker + "\n" + "\n".join(insertion) + parts[1]
             script_path.write_text(new_content, encoding="utf-8")
 
+    def _generate_map_files(self):
+        """Generate map files for dynamic partitions using map_file_generator"""
+        partitions = [
+            "system",
+            "vendor",
+            "product",
+            "system_ext",
+            "odm",
+            "my_product",
+            "my_manifest",
+            "my_stock",
+            "my_region",
+            "my_carrier",
+            "my_heytap",
+            "my_bigball",
+            "my_engineering",
+        ]
+
+        map_tool = str(Path("otatools/bin/map_file_generator"))
+
+        for part_name in partitions:
+            img_path = self.ctx.target_dir / f"{part_name}.img"
+            map_path = self.ctx.target_dir / f"{part_name}.map"
+
+            if not img_path.exists():
+                continue
+
+            try:
+                self.shell.run([map_tool, str(img_path), str(map_path)])
+                self.logger.info(f"Generated map for {part_name}.img")
+            except Exception as e:
+                self.logger.warning(f"Failed to generate map for {part_name}: {e}")
+
     def pack_ota_payload(self):
         """
         Pack AOSP OTA payload (generate payload.bin zip)
@@ -829,9 +862,20 @@ class Repacker:
         for part in ["SYSTEM", "SYSTEM_EXT", "PRODUCT", "VENDOR", "ODM", "MI_EXT"]:
             (self.product_out / part).mkdir(exist_ok=True)
 
+        # For A-only devices, generate map files before collecting images
+        is_ab = self.ctx.is_ab_device
+        if not is_ab:
+            self.logger.info("Generating map files for A-only OTA...")
+            self._generate_map_files()
+
         self.logger.info("Collecting logical partition images...")
         for img in self.ctx.target_dir.glob("*.img"):
             shutil.move(str(img), str(self.images_out / img.name))
+            # Also copy corresponding .map file if exists (for A-only OTA)
+            map_file = img.with_suffix(".map")
+            if map_file.exists():
+                shutil.copy2(str(map_file), str(self.images_out / f"{img.stem}.map"))
+                self.logger.debug(f"Copied {img.stem}.map to IMAGES/")
 
         self.logger.info("Collecting firmware images...")
         if self.ctx.repack_images_dir.exists():
@@ -970,6 +1014,7 @@ class Repacker:
                 f.write("ab_update=true\n")
             else:
                 # A-only specific config
+                f.write("ab_update=false\n")
                 f.write("blockimgdiff_versions=3,4\n")
                 f.write("use_dynamic_partitions=true\n")
                 f.write(f"dynamic_partition_list={super_parts_str}\n")
