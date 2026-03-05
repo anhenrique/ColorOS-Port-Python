@@ -28,7 +28,7 @@ def validate_features(data: Dict) -> List[str]:
         "oplus_feature", "app_feature", "permission_feature",
         "permission_oplus_feature", "features_remove", "features_remove_force",
         "features_remove_conditional", "xml_features", "build_props",
-        "props_remove", "props_add", "enable_eu_localization"
+        "props_remove", "props_add"
     }
     for key in data.keys():
         if key not in valid_keys:
