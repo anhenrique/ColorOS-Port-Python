@@ -3,6 +3,7 @@ import logging
 import sys
 import re
 import shutil
+import zipfile
 from pathlib import Path
 from src.core.config import Config
 from src.core.rom import RomPackage
@@ -46,6 +47,9 @@ def parse_args():
     parser.add_argument("--device_code", help="Device code for configuration override")
     parser.add_argument("--work_dir", default="build", help="Working directory")
     parser.add_argument(
+        "--clean", action="store_true", help="Clean working directory before starting"
+    )
+    parser.add_argument(
         "--pack_type",
         choices=["super", "payload"],
         default="payload",
@@ -84,6 +88,13 @@ def setup_logging(work_dir: Path, debug: bool = False):
     logger.info(f"Logging initialized. Log file: {log_file}")
 
 
+def clean_work_dir(work_dir: Path):
+    if work_dir.exists():
+        logger.warning(f"Cleaning working directory: {work_dir}")
+        shutil.rmtree(work_dir)
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+
 def detect_device_code(
     rom_path: str, args_device_code: str | None = None
 ) -> str | None:
@@ -91,7 +102,22 @@ def detect_device_code(
     if args_device_code:
         return args_device_code
 
-    # Priority 2: Filename pattern "ColorOS_<CODE>_..."
+    # Priority 2: Read from ZIP metadata file
+    try:
+        with zipfile.ZipFile(rom_path, "r") as zf:
+            metadata_path = "META-INF/com/android/metadata"
+            if metadata_path in zf.namelist():
+                with zf.open(metadata_path) as f:
+                    content = f.read().decode("utf-8")
+                    match = re.search(r"pre-device=(\S+)", content)
+                    if match:
+                        code = match.group(1)
+                        logger.info(f"Detected device code from metadata: {code}")
+                        return code
+    except Exception as e:
+        logger.debug(f"Failed to read metadata from ZIP: {e}")
+
+    # Priority 3: Filename pattern "ColorOS_<CODE>_..."
     filename = Path(rom_path).name
     match = re.search(r"ColorOS_([^_]+)_", filename)
     if match:
@@ -99,7 +125,7 @@ def detect_device_code(
         logger.info(f"Detected device code from filename: {code}")
         return code
 
-    # Priority 3: Fallback (original script default: op8t)
+    # Priority 4: Fallback
     return None
 
 
@@ -111,8 +137,24 @@ def copy_firmware_images(baserom: RomPackage, repack_images_dir: Path) -> int:
     """
     logger.info("Copying baserom firmware images...")
 
-    # Get list of firmware images
-    fw_images = list(baserom.images_dir.glob("*.img"))
+    # Collect all firmware images from multiple sources
+    fw_images = []
+
+    # 1. Copy images from firmware-update directory (Brotli format)
+    firmware_update_dir = baserom.images_dir / "firmware-update"
+    if firmware_update_dir.exists():
+        fw_images.extend(list(firmware_update_dir.glob("*.img")))
+
+    # 2. Copy storage-fw.img if exists (for some devices)
+    storage_fw = baserom.images_dir / "storage-fw.img"
+    if storage_fw.exists():
+        fw_images.append(storage_fw)
+
+    # 3. Copy other firmware images from images root (non-logical partitions)
+    for img in baserom.images_dir.glob("*.img"):
+        part_name = img.stem.replace("_a", "").replace("_b", "")
+        if part_name not in LOGICAL_PARTITIONS:
+            fw_images.append(img)
 
     if not fw_images:
         logger.warning("No firmware images found in baserom images directory")
@@ -173,6 +215,10 @@ def main():
     # Setup logging based on debug flag and work_dir
     setup_logging(work_dir, args.debug)
 
+    # Clean working directory if requested
+    if args.clean:
+        clean_work_dir(work_dir)
+
     # Reset and get global timer
     from src.utils.progress import reset_timer
 
@@ -219,9 +265,15 @@ def main():
                 repack_images_dir = work_dir / "repack_images"
                 repack_images_dir.mkdir(parents=True, exist_ok=True)
 
-                # Copy firmware images from baserom to repack_images
-                copied_count = copy_firmware_images(baserom, repack_images_dir)
-                logger.info(f"Copied {copied_count} firmware images to repack_images")
+                # Copy firmware images from baserom to repack_images (only for PAYLOAD format)
+                # For BROTLI format, firmware is in firmware-update/ directory and handled separately
+                if baserom.rom_type.name == "PAYLOAD":
+                    copied_count = copy_firmware_images(baserom, repack_images_dir)
+                    logger.info(
+                        f"Copied {copied_count} firmware images to repack_images"
+                    )
+                else:
+                    logger.info("Skipping firmware copy for non-PAYLOAD format")
 
                 # Port ROM only needs specific partitions from config
                 portrom_partitions = config.partition_to_port
@@ -243,11 +295,15 @@ def main():
 
         with timed_stage("Device Detection & Context Setup"):
             # 2. Refined Device Code Detection (After Extraction)
+            # Use ro.product.vendor.device as the unique device identifier (base_device)
+            # This is the device code used to find configuration in devices/target/
             if not device_code or device_code == "common":
-                device = baserom.get_prop("ro.product.device")
-                if device:
-                    device_code = device.strip().replace(" ", "").upper()
-                    logger.info(f"Refined device code from build.prop: {device_code}")
+                base_device = baserom.get_prop("ro.product.vendor.device")
+                if base_device:
+                    device_code = base_device.strip().replace(" ", "").upper()
+                    logger.info(
+                        f"Detected base_device from ro.product.vendor.device: {device_code}"
+                    )
 
                 if device_code:
                     try:
