@@ -18,6 +18,9 @@ from src.core.config_schema import validate_config
 from src.core.conditions import ConditionEvaluator, BuildContext
 from src.core.config_merger import ConfigMerger, MergeReport
 
+# New handler-based architecture
+from src.handlers import XmlFeatureHandler, BuildPropHandler, HandlerRegistry
+
 
 class SystemModifier:
     def __init__(self, context):
@@ -52,8 +55,8 @@ class SystemModifier:
         # Migrate permissions and configs from baserom
         self._migrate_oplus_features_configs()
 
-        # ColorOS specific: Apply XML features from config
-        self._apply_coloros_features()
+        # ColorOS specific: Apply XML features from config (using new handlers)
+        self._apply_features_with_handlers()
 
         # Optional: Dolby fix
         self._fix_dolby_audio()
@@ -311,6 +314,7 @@ class SystemModifier:
 
     def _execute_copy_files_from_stock(self, rule):
         """Copies files from baserom (stock) to target (portrom) with glob pattern support.
+        Supports both files and directories.
 
         Example:
         {
@@ -328,17 +332,21 @@ class SystemModifier:
             self.logger.warning(f"  No source pattern specified for: {description}")
             return
 
-        # Source is relative to stock (baserom) extracted directory
         stock_base = self.ctx.stock.extracted_dir
+        target_base = self.ctx.target_dir
+
         source_path = stock_base / source_pattern
 
-        # Target is relative to target_dir
-        target_base = self.ctx.target_dir
+        if source_path.is_dir():
+            target_path = target_base / target_dir_rel
+            self.logger.info(f"  {description}: copying directory {source_pattern}")
+            if target_path.exists():
+                shutil.rmtree(target_path)
+            shutil.copytree(source_path, target_path, symlinks=True, dirs_exist_ok=True)
+            self.logger.info(f"    Copied directory: {source_path.name}")
+            return
+
         target_path = target_base / target_dir_rel
-
-        # Use glob to find matching files
-        import glob
-
         source_files = list(stock_base.glob(source_pattern))
 
         if not source_files:
@@ -683,9 +691,15 @@ class SystemModifier:
         ctx = BuildContext()
 
         # Copy ROM type flags
-        ctx.portIsColorOS = getattr(self.ctx, "portIsColorOS", False)
-        ctx.portIsColorOSGlobal = getattr(self.ctx, "portIsColorOSGlobal", False)
-        ctx.portIsOOS = getattr(self.ctx, "portIsOOS", False)
+        ctx.port_is_coloros = getattr(self.ctx, "port_is_coloros", False)
+        ctx.port_is_coloros_global = getattr(self.ctx, "port_is_coloros_global", False)
+        ctx.port_is_oos = getattr(self.ctx, "port_is_oos", False)
+
+        # Copy base ROM type flags
+        ctx.base_is_coloros = getattr(self.ctx, "base_is_coloros", False)
+        ctx.base_is_coloros_cn = getattr(self.ctx, "base_is_coloros_cn", False)
+        ctx.base_is_coloros_global = getattr(self.ctx, "base_is_coloros_global", False)
+        ctx.base_is_oos = getattr(self.ctx, "base_is_oos", False)
 
         # Copy version info
         ctx.port_android_version = int(getattr(self.ctx, "port_android_version", 14))
@@ -935,127 +949,26 @@ class SystemModifier:
         except Exception:
             return None
 
-    def _apply_coloros_features(self):
+    def _apply_features_with_handlers(self):
         """
-        Apply ColorOS specific XML features - port.sh add_feature_v2 logic
-        Handles oplus_feature, app_feature, permission_feature, permission_oplus_feature
-        Supports conditional features based on device properties
+        Apply features using the new handler-based architecture.
+        Replaces _apply_coloros_features with modular handlers.
         """
-        self.logger.info("Applying ColorOS XML features...")
+        self.logger.info("Applying features using new handler architecture...")
 
-        # Load ColorOS features config using hierarchical merge
+        # Load features config
         config = self._load_merged_config("features.json")
         if not config:
-            self.logger.info("No ColorOS features config found, skipping.")
+            self.logger.info("No features config found, skipping.")
             return
 
-        # Import condition evaluator
-        from src.core.conditions import ConditionEvaluator, BuildContext
+        # Create handler registry and register handlers
+        registry = HandlerRegistry()
+        registry.register(XmlFeatureHandler())
+        registry.register(BuildPropHandler())
 
-        # Create a build context from PortingContext
-        build_ctx = BuildContext()
-        build_ctx.portIsColorOS = getattr(self.ctx, "portIsColorOS", False)
-        build_ctx.portIsColorOSGlobal = getattr(self.ctx, "portIsColorOSGlobal", False)
-        build_ctx.portIsOOS = getattr(self.ctx, "portIsOOS", False)
-        build_ctx.port_android_version = int(
-            getattr(self.ctx, "port_android_version", 0) or 0
-        )
-        build_ctx.base_android_version = int(
-            getattr(self.ctx, "base_android_version", 0) or 0
-        )
-        build_ctx.port_oplusrom_version = getattr(self.ctx, "port_oplusrom_version", "")
-        build_ctx.base_regionmark = getattr(self.ctx, "base_regionmark", "")
-        build_ctx.base_chipset_family = getattr(self.ctx, "base_chipset_family", "")
-        build_ctx.base_device_code = getattr(self.ctx, "base_device_code", "")
-
-        self.logger.info(
-            f"DEBUG: base_android_version = {build_ctx.base_android_version}, port_android_version = {build_ctx.port_android_version}"
-        )
-
-        evaluator = ConditionEvaluator()
-
-        # Apply each feature type
-        self._apply_coloros_xml_features(
-            config.get("oplus_feature", []), "oplus_feature"
-        )
-        self._apply_coloros_xml_features(config.get("app_feature", []), "app_feature")
-        self._apply_coloros_xml_features(
-            config.get("permission_feature", []), "permission_feature"
-        )
-        self._apply_coloros_xml_features(
-            config.get("permission_oplus_feature", []), "permission_oplus_feature"
-        )
-
-        # Apply conditional features
-        for feature_type in [
-            "oplus_feature",
-            "app_feature",
-            "permission_feature",
-            "permission_oplus_feature",
-        ]:
-            conditional_key = f"{feature_type}_conditional"
-            conditional_features = config.get(conditional_key, [])
-            for item in conditional_features:
-                if isinstance(item, dict) and "feature" in item:
-                    condition = item.get("condition", {})
-                    # Wrap condition in proper format for evaluator
-                    result = evaluator.evaluate({"condition": condition}, build_ctx)
-                    self.logger.info(
-                        f"DEBUG: Evaluating {item['feature'][:50]}... with condition {condition} -> {result}"
-                    )
-                    if result:
-                        self._apply_coloros_xml_features(
-                            [item["feature"]], feature_type
-                        )
-                        self.logger.info(
-                            f"Applied conditional feature: {item['feature']}"
-                        )
-                    else:
-                        self.logger.info(
-                            f"Skipped conditional feature: {item['feature']}"
-                        )
-
-        # Remove features from XML (unconditional)
-        features_remove = config.get("features_remove", [])
-        if features_remove:
-            self._remove_features_from_xml(features_remove)
-
-        # Remove conditional features
-        features_remove_conditional = config.get("features_remove_conditional", [])
-        for item in features_remove_conditional:
-            if isinstance(item, dict) and "features" in item:
-                condition = item.get("condition", {})
-                # Wrap condition in proper format for evaluator
-                result = evaluator.evaluate({"condition": condition}, build_ctx)
-                self.logger.info(
-                    f"DEBUG: Evaluating removal with condition {condition} -> {result}"
-                )
-                if result:
-                    self._remove_features_from_xml(item["features"])
-                    self.logger.info(
-                        f"Removed conditional features: {item['features']}"
-                    )
-                else:
-                    self.logger.info(
-                        f"Skipped removal of conditional features: {item['features']}"
-                    )
-
-        # Remove features with force mode (ignore baserom check)
-        features_remove_force = config.get("features_remove_force", [])
-        if features_remove_force:
-            self.logger.info(
-                f"Force removing {len(features_remove_force)} features (ignoring baserom check)..."
-            )
-            self._remove_features_from_xml(features_remove_force, force=True)
-
-        # Apply props remove/add
-        props_remove = config.get("props_remove", [])
-        if props_remove:
-            self._remove_build_props(props_remove)
-
-        props_add = config.get("props_add", {})
-        if props_add:
-            self._apply_build_props(props_add)
+        # Apply all handlers
+        registry.apply_all(config, self.ctx)
 
     def _apply_coloros_xml_features(self, features: list, feature_type: str):
         """Apply ColorOS XML features - port.sh add_feature_v2 logic"""
