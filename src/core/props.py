@@ -57,7 +57,7 @@ class PropertyModifier:
             "ro.build.version.oplusrom",
             "ro.build.version.oplusrom.display",
             "ro.build.version.oplusrom.confidential",
-            "ro.build.version.realmeui"
+            "ro.build.version.realmeui",
         ]
 
         # 3. Parse Props
@@ -146,6 +146,9 @@ class PropertyModifier:
                 (self.ctx.port_product_name, self.ctx.base_product_name),
                 (self.ctx.port_my_product_type, self.ctx.base_my_product_type),
                 (self.ctx.port_product_device, self.ctx.base_product_device),
+                # Vendor device and model (reliable identifiers)
+                (self.ctx.port_vendor_device, self.ctx.base_vendor_device),
+                (self.ctx.port_vendor_model, self.ctx.base_vendor_model),
             ]
 
             for old_val, new_val in replacements:
