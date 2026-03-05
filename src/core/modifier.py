@@ -539,7 +539,14 @@ class SystemModifier:
 
     def _execute_unzip_override(self, rule):
         source_zip = Path(rule["source"])
-        target_base_dir = self.ctx.work_dir / rule.get("target_base_dir", "")
+        target_base_dir_config = rule.get("target_base_dir", "")
+        
+        # Fix: If target_base_dir starts with "build/", remove it to avoid duplicate paths
+        # e.g., "build/target/" -> "target/" since work_dir is already "build"
+        if target_base_dir_config.startswith("build/"):
+            target_base_dir_config = target_base_dir_config[6:]  # Remove "build/"
+        
+        target_base_dir = self.ctx.work_dir / target_base_dir_config
 
         # Ensure asset exists (download if missing)
         if not self.ctx.assets.ensure_asset(source_zip):
@@ -587,9 +594,13 @@ class SystemModifier:
         files_to_remove = rule.get("files", [])
         if files_to_remove:
             self.logger.info(f"  Removing {len(files_to_remove)} specified patterns...")
-            effective_base_dir_for_removes = self.ctx.work_dir / rule.get(
-                "target_base_dir", ""
-            )
+            target_base_dir_config = rule.get("target_base_dir", "")
+            
+            # Fix: If target_base_dir starts with "build/", remove it to avoid duplicate paths
+            if target_base_dir_config.startswith("build/"):
+                target_base_dir_config = target_base_dir_config[6:]
+            
+            effective_base_dir_for_removes = self.ctx.work_dir / target_base_dir_config
             for pattern in files_to_remove:
                 # Support glob patterns
                 matched = (
