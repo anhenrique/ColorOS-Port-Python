@@ -154,6 +154,9 @@ class RomPackage:
                             self.logger.info(f"Extracting {f}...")
                             z.extract(f, self.images_dir)
 
+                # 1.5 Fix filenames with numeric suffixes (e.g., system.1.new.dat.br -> system.new.dat.br)
+                self._fix_br_filenames()
+
                 # 2. Process .br files
                 # Note: We iterate over extracted files in images_dir
                 for br_file in self.images_dir.glob("*.new.dat.br"):
@@ -400,6 +403,37 @@ class RomPackage:
                     os.unlink(c)
             except Exception as e:
                 self.logger.error(f"Failed to merge cust.img: {e}")
+
+    def _fix_br_filenames(self):
+        """
+        Fix filenames with numeric suffixes in extracted BR files.
+        E.g., system.1.new.dat.br -> system.new.dat.br
+        This matches the shell script behavior.
+        """
+        import re
+
+        for file_path in self.images_dir.iterdir():
+            if not file_path.is_file():
+                continue
+
+            filename = file_path.name
+            name, ext = file_path.stem, file_path.suffix
+
+            # Check if filename contains digits that need to be cleaned
+            # Pattern: remove digits before known extensions
+            if re.search(r"\d", name):
+                # Remove digits from the name part (before extensions)
+                # E.g., "system.1.new.dat" -> "system.new.dat"
+                # The shell script uses: sed 's/[0-9]\+\(\.[^0-9]\+\)/\1/g'
+                new_name = re.sub(r"\d+(\.[^\d.]+)", r"\1", name)
+                # Clean up double dots
+                new_name = new_name.replace("..", ".")
+
+                if new_name != name:
+                    new_file_path = self.images_dir / f"{new_name}{ext}"
+                    if new_file_path != file_path:
+                        self.logger.info(f"Renaming {filename} -> {new_file_path.name}")
+                        shutil.move(str(file_path), str(new_file_path))
 
     def _batch_extract_files(self, candidates: list[str]):
         """
