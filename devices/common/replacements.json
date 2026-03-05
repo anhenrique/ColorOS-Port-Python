@@ -176,6 +176,131 @@
             "copy_vendor": true,
             "remove_patterns": ["*display*[0-9]*.apk"],
             "overlay_pattern": "*{my_product_type}*.apk"
+        },
+        {
+            "id": "migrate_res_directory",
+            "description": "Replace res directory from baserom",
+            "type": "copy_files_from_stock",
+            "source": "my_product/res",
+            "target_dir": "my_product/res"
+        },
+        {
+            "id": "migrate_vendor_directory",
+            "description": "Replace vendor directory from baserom",
+            "type": "copy_files_from_stock",
+            "source": "my_product/vendor",
+            "target_dir": "my_product/vendor"
+        },
+        {
+            "id": "copy_sys_game_manager_config",
+            "description": "Copy sys_game_manager_config.json from baserom",
+            "type": "conditional_copy",
+            "source": "my_product/etc/extension/sys_game_manager_config.json",
+            "target": "my_product/etc/extension/sys_game_manager_config.json"
+        },
+        {
+            "id": "copy_audio_xml_files",
+            "description": "Copy audio*.xml files from baserom",
+            "type": "copy_files_from_stock",
+            "source": "my_product/etc/audio*.xml",
+            "target_dir": "my_product/etc/"
+        },
+        {
+            "id": "copy_default_volume_tables",
+            "description": "Copy default_volume_tables.xml from baserom",
+            "type": "conditional_copy",
+            "source": "my_product/etc/default_volume_tables.xml",
+            "target": "my_product/etc/default_volume_tables.xml"
+        },
+        {
+            "id": "copy_breenospeech2_directory",
+            "description": "Copy breenospeech2 directory from baserom",
+            "type": "conditional_copy",
+            "source": "my_product/etc/breenospeech2",
+            "target": "my_product/etc/breenospeech2"
+        },
+        {
+            "id": "copy_bootanimation_conditional",
+            "description": "Copy bootanimation directory (conditional based on ROM type)",
+            "type": "conditional_copy",
+            "source": "my_product/media/bootanimation",
+            "target": "my_product/media/bootanimation",
+            "condition": {
+                "or": [
+                    {
+                        "and": [
+                            {"base_rom_type": "OxygenOS"},
+                            {"port_rom_type": "OxygenOS"}
+                        ]
+                    },
+                    {
+                        "and": [
+                            {"base_rom_type": "ColorOS"},
+                            {"or": [
+                                {"port_rom_type": "ColorOS_Global"},
+                                {"port_rom_type": "ColorOS"}
+                            ]}
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "id": "copy_quickboot_directory",
+            "description": "Copy quickboot directory from baserom",
+            "type": "conditional_copy",
+            "source": "my_product/media/quickboot",
+            "target": "my_product/media/quickboot"
+        },
+        {
+            "id": "copy_vibrator_directory",
+            "description": "Copy vibrator directory from baserom",
+            "type": "conditional_copy",
+            "source": "my_product/etc/vibrator",
+            "target": "my_product/etc/vibrator"
+        },
+        {
+            "id": "copy_fusionlight_profile_directory",
+            "description": "Copy fusionlight_profile directory from baserom",
+            "type": "conditional_copy",
+            "source": "my_product/etc/fusionlight_profile",
+            "target": "my_product/etc/fusionlight_profile"
+        },
+        {
+            "id": "copy_refresh_rate_config",
+            "description": "Copy refresh_rate_config.xml from baserom",
+            "type": "conditional_copy",
+            "source": "my_product/etc/refresh_rate_config.xml",
+            "target": "my_product/etc/refresh_rate_config.xml"
+        },
+        {
+            "id": "copy_resolution_switch_config",
+            "description": "Copy sys_resolution_switch_config.xml from baserom",
+            "type": "conditional_copy",
+            "source": "my_product/etc/sys_resolution_switch_config.xml",
+            "target": "my_product/etc/sys_resolution_switch_config.xml"
+        },
+        {
+            "id": "copy_sensor_config_xml",
+            "description": "Copy com.oplus.sensor_config.xml from baserom",
+            "type": "conditional_copy",
+            "source": "my_product/etc/permissions/com.oplus.sensor_config.xml",
+            "target": "my_product/etc/permissions/com.oplus.sensor_config.xml"
+        },
+        {
+            "id": "copy_ovms_files",
+            "description": "Copy OVMS_* files from baserom",
+            "type": "copy_files_from_stock",
+            "source": "my_product/etc/OVMS_*",
+            "target_dir": "my_product/etc/"
+        },
+        {
+            "id": "copy_super_computing_if_missing",
+            "description": "Copy super_computing directory from devices/common if missing",
+            "type": "copy_file_internal",
+            "source": "devices/common/super_computing",
+            "target": "my_product/etc/string_super_computing",
+            "condition_target_exists": false
         }
     ]
 }
