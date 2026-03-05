@@ -102,20 +102,27 @@ class Context:
         self.base_android_version = baserom.get_prop("ro.build.version.release")
         self.base_android_sdk = baserom.get_prop("ro.system.build.version.sdk")
 
+        # Product device and model (less reliable, may vary by build)
         self.base_product_device = baserom.get_prop("ro.product.device")
         self.base_product_name = baserom.get_prop("ro.product.name")
         self.base_product_model = baserom.get_prop("ro.product.model")
 
-        # Priority: my_manifest (Project Code) is best for porting logic
-        base_device_code = baserom.get_prop("ro.oplus.version.my_manifest")
-        if base_device_code:
-            self.base_device_code = base_device_code.split("_")[0].upper()
-        else:
+        # Vendor device is the reliable unique identifier (Google Play supported devices)
+        self.base_vendor_device = baserom.get_prop("ro.product.vendor.device")
+        self.base_vendor_model = baserom.get_prop("ro.product.vendor.model")
+
+        # base_device_code: Use vendor.device as primary identifier for config loading
+        # This is the unique device code used to find devices/target/{code}/ config
+        if self.base_vendor_device:
             self.base_device_code = (
-                self.base_product_device.upper()
-                if self.base_product_device
-                else "UNKNOWN"
+                self.base_vendor_device.strip().replace(" ", "").upper()
             )
+        elif base_device_code := baserom.get_prop("ro.oplus.version.my_manifest"):
+            self.base_device_code = base_device_code.split("_")[0].upper()
+        elif self.base_product_device:
+            self.base_device_code = self.base_product_device.upper()
+        else:
+            self.base_device_code = "UNKNOWN"
 
         self.base_vendor_brand = baserom.get_prop("ro.product.vendor.brand")
 
@@ -147,8 +154,16 @@ class Context:
 
         self.port_chipset_family = portrom.get_prop("ro.build.device_family")
 
-        port_device_code = portrom.get_prop("ro.oplus.version.my_manifest")
-        if port_device_code:
+        # Vendor device is the reliable unique identifier
+        self.port_vendor_device = portrom.get_prop("ro.product.vendor.device")
+        self.port_vendor_model = portrom.get_prop("ro.product.vendor.model")
+
+        # port_device_code: Use vendor.device as primary identifier
+        if self.port_vendor_device:
+            self.port_device_code = (
+                self.port_vendor_device.strip().replace(" ", "").upper()
+            )
+        elif port_device_code := portrom.get_prop("ro.oplus.version.my_manifest"):
             self.port_device_code = port_device_code.split("_")[0]
 
         self.port_product_device = portrom.get_prop("ro.product.device")
