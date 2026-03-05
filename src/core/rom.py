@@ -103,6 +103,60 @@ class RomPackage:
 
         self.images_dir.mkdir(parents=True, exist_ok=True)
 
+        # === Check if source has changed and should extract new images ===
+        source_hash_path = self.work_dir / "source_file.hash"
+        source_changed = True
+        current_source_hash = self._compute_file_hash(self.path)
+
+        if source_hash_path.exists():
+            try:
+                with open(source_hash_path, "r") as f:
+                    saved_hash = f.read().strip()
+                source_changed = saved_hash != current_source_hash
+            except Exception:
+                self.logger.warning(
+                    f"[{self.label}] Could not read hash file, re-extracting."
+                )
+                source_changed = True
+        else:
+            source_changed = True
+
+        if source_changed:
+            self.logger.info(
+                f"[{self.label}] Source file changed, starting re-extraction..."
+            )
+            # Clean up old extracted data to avoid stale cache
+            if self.extracted_dir.exists():
+                self.logger.info(
+                    f"[{self.label}] Cleaning up old extracted directory..."
+                )
+                shutil.rmtree(self.extracted_dir)
+            if self.config_dir.exists():
+                shutil.rmtree(self.config_dir)
+            # Clean up old images as well for consistency
+            if any(self.images_dir.iterdir()):
+                self.logger.info(f"[{self.label}] Cleaning up old images directory...")
+                for item in self.images_dir.iterdir():
+                    if item.is_file():
+                        item.unlink()
+                    elif item.is_dir():
+                        shutil.rmtree(item)
+        else:
+            self.logger.info(
+                f"[{self.label}] Source file unchanged, checking cached data..."
+            )
+            if any(self.images_dir.iterdir()):
+                self.logger.info(
+                    f"[{self.label}] Using cached images from previous extraction."
+                )
+                self._batch_extract_files(partitions or ANDROID_LOGICAL_PARTITIONS)
+                return
+            else:
+                self.logger.info(
+                    f"[{self.label}] Source unchanged but images missing, re-extracting..."
+                )
+                source_changed = True
+
         # === Step 1: Payload/Zip -> Images (Extract img) ===
         try:
             if self.rom_type == RomType.PAYLOAD:
@@ -332,6 +386,21 @@ class RomPackage:
             self.logger.error(f"Image extraction failed: {e}")
             raise
 
+        self._batch_extract_files(partitions or ANDROID_LOGICAL_PARTITIONS)
+
+        # Save source hash after successful extraction
+        if source_changed:
+            try:
+                with open(source_hash_path, "w") as f:
+                    f.write(current_source_hash)
+                self.logger.info(
+                    f"[{self.label}] Saved source file hash for future change detection."
+                )
+            except Exception as e:
+                self.logger.warning(
+                    f"[{self.label}] Could not save source hash file: {e}"
+                )
+
     def _process_sparse_images(self):
         """
         Merge/Convert sparse images (super.img.*, cust.img.*) to raw images using simg2img
@@ -434,6 +503,18 @@ class RomPackage:
                     if new_file_path != file_path:
                         self.logger.info(f"Renaming {filename} -> {new_file_path.name}")
                         shutil.move(str(file_path), str(new_file_path))
+
+    def _compute_file_hash(self, file_path: Path) -> str:
+        """Compute SHA-256 hash of a file for change detection."""
+        import hashlib
+
+        hash_sha256 = hashlib.sha256()
+
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_sha256.update(chunk)
+
+        return hash_sha256.hexdigest()[:16]
 
     def _batch_extract_files(self, candidates: list[str]):
         """
