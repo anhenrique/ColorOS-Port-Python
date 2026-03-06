@@ -1,0 +1,5 @@
+{
+    "enable_ksu": true,
+    "ksu_type": "nongki",
+    "disable_vbmeta": true
+}
