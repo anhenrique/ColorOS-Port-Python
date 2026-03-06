@@ -2600,9 +2600,11 @@ class FirmwareModifier:
                 return
         else:
             # A-only device: use boot.img from baserom images
-            target_boot = self.ctx.baserom.extracted_dir / "images" / "boot.img"
+            target_boot = self.ctx.baserom.images_dir / "boot.img"
             if not target_boot.exists():
-                self.logger.error(f"boot.img not found in baserom images")
+                self.logger.error(
+                    f"boot.img not found in baserom images: {target_boot}"
+                )
                 return
             # Copy to repack_images for processing
             self.ctx.repack_images_dir.mkdir(parents=True, exist_ok=True)
