@@ -210,6 +210,14 @@ class RomPackage:
                             if not partitions or part_name in partitions:
                                 should_extract = True
 
+                        # storage-fw handling (firmware files for storage)
+                        elif f.startswith("storage-fw/"):
+                            should_extract = True
+
+                        # ffu_tool handling
+                        elif f == "ffu_tool" or f.startswith("ffu_tool"):
+                            should_extract = True
+
                         if should_extract:
                             self.logger.info(f"Extracting {f}...")
                             z.extract(f, self.images_dir)
