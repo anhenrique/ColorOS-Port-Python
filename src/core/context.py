@@ -74,9 +74,9 @@ class Context:
         """Target display ID (port display with base device code)"""
         if self._target_display_id is None:
             port_display = self.portrom.display_id
-            if port_display and self.portrom.device_code and self.baserom.device_code:
+            if port_display and self.portrom.vendor_model and self.baserom.vendor_model:
                 self._target_display_id = port_display.replace(
-                    self.portrom.device_code, self.baserom.device_code
+                    self.portrom.vendor_model, self.baserom.vendor_model
                 )
             else:
                 self._target_display_id = port_display
@@ -94,9 +94,12 @@ class Context:
         return self._target_rom_version
 
     @property
-    def security_patch(self): return self.portrom.security_patch
+    def security_patch(self):
+        return self.portrom.security_patch
+
     @property
-    def is_ab_device(self): return self.baserom.is_ab_device
+    def is_ab_device(self):
+        return self.baserom.is_ab_device
 
     def fetch_rom_info(self):
         """Fetch and log ROM properties (now delegated to RomPackage properties)"""
@@ -127,12 +130,12 @@ class Context:
         # if self.build_dir.exists():
         #     shutil.rmtree(self.build_dir)
         self.build_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Clean target_dir to avoid interference from previous builds
         if self.target_dir.exists():
             shutil.rmtree(self.target_dir)
         self.target_dir.mkdir(parents=True, exist_ok=True)
-        
+
         self.repack_dir.mkdir(parents=True, exist_ok=True)
         self.target_config_dir.mkdir(parents=True, exist_ok=True)
         self.repack_images_dir.mkdir(parents=True, exist_ok=True)
