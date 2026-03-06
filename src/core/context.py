@@ -58,85 +58,12 @@ class Context:
 
         self._init_workspace()
 
-    # === Compatibility properties (delegate to RomPackage) ===
+    # === Target properties (derived from base/port ROMs) ===
 
-    # Base ROM properties
-    @property
-    def base_android_version(self): return self.baserom.android_version
-    @property
-    def base_android_sdk(self): return self.baserom.android_sdk
-    @property
-    def base_device_code(self): return self.baserom.device_code
-    @property
-    def base_product_device(self): return self.baserom.product_device
-    @property
-    def base_product_name(self): return self.baserom.product_name
-    @property
-    def base_product_model(self): return self.baserom.product_model
-    @property
-    def base_vendor_device(self): return self.baserom.vendor_device
-    @property
-    def base_vendor_model(self): return self.baserom.vendor_model
-    @property
-    def base_vendor_brand(self): return self.baserom.vendor_brand
-    @property
-    def base_chipset_family(self): return self.baserom.chipset_family
-    @property
-    def base_market_name(self): return self.baserom.market_name
-    @property
-    def base_market_enname(self): return self.baserom.market_enname
-    @property
-    def base_regionmark(self): return self.baserom.region_mark
-    @property
-    def base_rom_density(self): return self.baserom.lcd_density
-    @property
-    def base_my_product_type(self): return self.baserom.my_product_type
-
-    # Port ROM properties
-    @property
-    def port_android_version(self): return self.portrom.android_version
-    @property
-    def port_android_sdk(self): return self.portrom.android_sdk
-    @property
-    def port_device_code(self): return self.portrom.device_code
-    @property
-    def port_product_device(self): return self.portrom.product_device
-    @property
-    def port_product_name(self): return self.portrom.product_name
-    @property
-    def port_product_model(self): return self.portrom.product_model
-    @property
-    def port_vendor_device(self): return self.portrom.vendor_device
-    @property
-    def port_vendor_model(self): return self.portrom.vendor_model
-    @property
-    def port_vendor_brand(self): return self.portrom.vendor_brand
-    @property
-    def port_chipset_family(self): return self.portrom.chipset_family
-    @property
-    def port_market_name(self): return self.portrom.market_name
-    @property
-    def port_my_product_type(self): return self.portrom.my_product_type
-    @property
-    def port_area(self): return self.portrom.area
-    @property
-    def port_brand(self): return self.portrom.brand
-    @property
-    def port_oplusrom_version(self): return self.portrom.oplusrom_version
-    @property
-    def port_is_realme_ui(self): return self.portrom.is_realme_ui
-    @property
-    def port_is_coloros_global(self): return self.portrom.is_coloros_global
-    @property
-    def port_is_oos(self): return self.portrom.is_oos
-    @property
-    def port_is_coloros(self): return self.portrom.is_coloros
-
-    # Target properties
     @property
     def target_device_code(self):
         """Target device code (from base ROM)"""
-        return self._target_device_code or self.base_device_code
+        return self._target_device_code or self.baserom.device_code
 
     @target_device_code.setter
     def target_device_code(self, value):
@@ -147,9 +74,9 @@ class Context:
         """Target display ID (port display with base device code)"""
         if self._target_display_id is None:
             port_display = self.portrom.display_id
-            if port_display and self.port_device_code and self.base_device_code:
+            if port_display and self.portrom.device_code and self.baserom.device_code:
                 self._target_display_id = port_display.replace(
-                    self.port_device_code, self.base_device_code
+                    self.portrom.device_code, self.baserom.device_code
                 )
             else:
                 self._target_display_id = port_display

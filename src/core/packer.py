@@ -31,7 +31,7 @@ class Repacker:
         self.fix_timestamp = "1230768000"
         # Define OTA output directory structure
         self.out_dir = Path("out").resolve()
-        self.product_out = self.out_dir / "target" / "product" / self.ctx.base_vendor_device
+        self.product_out = self.out_dir / "target" / "product" / self.ctx.baserom.vendor_device
         self.images_out = self.product_out / "IMAGES"
         self.meta_out = self.product_out / "META"
         self.ota_tools_dir = Path("otatools").resolve()
@@ -513,7 +513,7 @@ class Repacker:
         self.logger.info("Generating hybrid flashing scripts...")
 
         # Prepare output directory
-        out_name = f"{self.ctx.base_vendor_device}_{self.ctx.target_rom_version}_hybrid"
+        out_name = f"{self.ctx.baserom.vendor_device}_{self.ctx.target_rom_version}_hybrid"
         out_path = self.out_dir / out_name
 
         if out_path.exists():
@@ -592,7 +592,7 @@ class Repacker:
         # 5. Zip the package
         self.logger.info("Zipping hybrid package...")
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        final_zip_name = f"{self.ctx.base_vendor_device}-hybrid-{self.ctx.target_rom_version}-{timestamp}.zip"
+        final_zip_name = f"{self.ctx.baserom.vendor_device}-hybrid-{self.ctx.target_rom_version}-{timestamp}.zip"
         final_zip_path = self.out_dir / final_zip_name
 
         # Create zip manually to control compression
@@ -617,7 +617,7 @@ class Repacker:
         # So format should be: Part1_Part2_Part3_Part4_MD5_Part6.zip
         # Mapping: Device_Hybrid_Version_SecurityPatch_MD5_Timestamp.zip
 
-        renamed_zip_name = f"{self.ctx.base_vendor_device}_Hybrid_{self.ctx.target_rom_version}_{self.ctx.security_patch}_{md5}_{timestamp}.zip"
+        renamed_zip_name = f"{self.ctx.baserom.vendor_device}_Hybrid_{self.ctx.target_rom_version}_{self.ctx.security_patch}_{md5}_{timestamp}.zip"
         renamed_zip_path = self.out_dir / renamed_zip_name
         final_zip_path.rename(renamed_zip_path)
 
@@ -631,8 +631,8 @@ class Repacker:
         content = file_path.read_text(encoding="utf-8", errors="ignore")
 
         replacements = {
-            "device_code": self.ctx.base_vendor_device,
-            "baseversion": self.ctx.base_android_version,  # Or full version string?
+            "device_code": self.ctx.baserom.vendor_device,
+            "baseversion": self.ctx.baserom.android_version,  # Or full version string?
             "portversion": self.ctx.target_rom_version,
         }
 
@@ -893,7 +893,7 @@ class Repacker:
             for img in self.ctx.repack_images_dir.glob("*.img"):
                 shutil.move(str(img), str(self.images_out / img.name))
 
-        device_custom_dir = Path(f"devices/target/{self.ctx.base_vendor_device}")
+        device_custom_dir = Path(f"devices/target/{self.ctx.baserom.vendor_device}")
         if device_custom_dir.exists():
             # Handle boot/dtbo replacement
             ksu_boot = list(device_custom_dir.glob("boot*.img"))
@@ -1158,7 +1158,7 @@ class Repacker:
 
             md5 = hashlib.md5(open(output_zip, "rb").read()).hexdigest()[:10]
 
-            final_name = f"{self.ctx.base_vendor_device}-ota_full-{self.ctx.target_rom_version}-{self.ctx.security_patch}-{timestamp}-{md5}-{self.ctx.port_android_version}.zip"
+            final_name = f"{self.ctx.baserom.vendor_device}-ota_full-{self.ctx.target_rom_version}-{self.ctx.security_patch}-{timestamp}-{md5}-{self.ctx.portrom.android_version}.zip"
             final_path = self.out_dir / final_name
             output_zip.rename(final_path)
             self.logger.info(f"Final OTA Package: {final_path}")
@@ -1171,9 +1171,9 @@ class Repacker:
         Get Super partition size
         Logic: Try matching both Device Code and Model
         """
-        device_code = self.ctx.base_vendor_device.upper() if self.ctx.base_vendor_device else ""
+        device_code = self.ctx.baserom.vendor_device.upper() if self.ctx.baserom.vendor_device else ""
         product_model = (
-            self.ctx.base_product_model.upper() if self.ctx.base_product_model else ""
+            self.ctx.baserom.product_model.upper() if self.ctx.baserom.product_model else ""
         )
 
         self.logger.info(
@@ -1233,7 +1233,7 @@ class Repacker:
         ota_bin = self.product_out / "OTA" / "bin"
         ota_bin.mkdir(parents=True, exist_ok=True)
 
-        updater_src = Path(f"devices/target/{self.ctx.base_vendor_device}/OTA/bin/updater")
+        updater_src = Path(f"devices/target/{self.ctx.baserom.vendor_device}/OTA/bin/updater")
         updater_dst = ota_bin / "updater"
 
         if updater_src.exists():
@@ -1265,7 +1265,7 @@ class Repacker:
         recovery_etc = self.product_out / "RECOVERY" / "RAMDISK" / "etc"
         recovery_etc.mkdir(parents=True, exist_ok=True)
 
-        fstab_src = Path(f"devices/target/{self.ctx.base_vendor_device}/recovery.fstab")
+        fstab_src = Path(f"devices/target/{self.ctx.baserom.vendor_device}/recovery.fstab")
         fstab_dst = recovery_etc / "recovery.fstab"
 
         if fstab_src.exists():
@@ -1277,7 +1277,7 @@ class Repacker:
                 self.logger.info("Copied default recovery.fstab")
 
         # 4. Copy releasetools.py
-        releasetools_src = Path(f"devices/target/{self.ctx.base_vendor_device}/releasetools.py")
+        releasetools_src = Path(f"devices/target/{self.ctx.baserom.vendor_device}/releasetools.py")
         releasetools_dst = self.meta_out / "releasetools.py"
 
         if releasetools_src.exists():

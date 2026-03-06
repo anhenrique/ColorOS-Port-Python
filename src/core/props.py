@@ -141,14 +141,14 @@ class PropertyModifier:
 
             # Global replacements (port -> base)
             replacements = [
-                (self.ctx.port_device_code, self.ctx.base_device_code),
-                (self.ctx.port_product_model, self.ctx.base_product_model),
-                (self.ctx.port_product_name, self.ctx.base_product_name),
-                (self.ctx.port_my_product_type, self.ctx.base_my_product_type),
-                (self.ctx.port_product_device, self.ctx.base_product_device),
+                (self.ctx.portrom.device_code, self.ctx.baserom.device_code),
+                (self.ctx.portrom.product_model, self.ctx.baserom.product_model),
+                (self.ctx.portrom.product_name, self.ctx.baserom.product_name),
+                (self.ctx.portrom.my_product_type, self.ctx.baserom.my_product_type),
+                (self.ctx.portrom.product_device, self.ctx.baserom.product_device),
                 # Vendor device and model (reliable identifiers)
-                (self.ctx.port_vendor_device, self.ctx.base_vendor_device),
-                (self.ctx.port_vendor_model, self.ctx.base_vendor_model),
+                (self.ctx.portrom.vendor_device, self.ctx.baserom.vendor_device),
+                (self.ctx.portrom.vendor_model, self.ctx.baserom.vendor_model),
             ]
 
             for old_val, new_val in replacements:
@@ -203,15 +203,15 @@ class PropertyModifier:
         manifest_props = self._read_prop_to_dict(manifest_prop_file)
 
         # Market name/enname (Only if NOT in my_manifest)
-        if self.ctx.base_market_name:
+        if self.ctx.baserom.market_name:
             if (
                 "ro.vendor.oplus.market.name" not in manifest_props
                 and "ro.oplus.market.name" not in manifest_props
             ):
                 self._add_or_replace_prop(
-                    bruce_prop, "ro.vendor.oplus.market.name", self.ctx.base_market_name
+                    bruce_prop, "ro.vendor.oplus.market.name", self.ctx.baserom.market_name
                 )
-        if self.ctx.base_market_enname:
+        if self.ctx.baserom.market_enname:
             if (
                 "ro.vendor.oplus.market.enname" not in manifest_props
                 and "ro.oplus.market.enname" not in manifest_props
@@ -219,7 +219,7 @@ class PropertyModifier:
                 self._add_or_replace_prop(
                     bruce_prop,
                     "ro.vendor.oplus.market.enname",
-                    self.ctx.base_market_enname,
+                    self.ctx.baserom.market_enname,
                 )
 
         # Ported by watermark (Modify the effective file)
@@ -238,18 +238,18 @@ class PropertyModifier:
         self._add_or_replace_prop(
             bruce_prop,
             "persist.oplus.prophook.com.oplus.ai.magicstudio",
-            f"MODEL:{self.ctx.base_device_code},BRAND:{self.ctx.base_product_model}",
+            f"MODEL:{self.ctx.baserom.device_code},BRAND:{self.ctx.baserom.product_model}",
         )
         self._add_or_replace_prop(
             bruce_prop,
             "persist.oplus.prophook.com.oplus.aiunit",
-            f"MODEL:{self.ctx.base_device_code},BRAND:{self.ctx.base_product_model}",
+            f"MODEL:{self.ctx.baserom.device_code},BRAND:{self.ctx.baserom.product_model}",
         )
 
         # LCD Density from base (Should stay in main my_product prop)
-        if self.ctx.base_rom_density:
+        if self.ctx.baserom.lcd_density:
             self._add_or_replace_prop(
-                my_product_prop, "ro.sf.lcd_density", self.ctx.base_rom_density
+                my_product_prop, "ro.sf.lcd_density", self.ctx.baserom.lcd_density
             )
 
     def _modify_system_ext_props(self):
@@ -264,13 +264,13 @@ class PropertyModifier:
 
         # Brand replacement
         if (
-            self.ctx.port_is_coloros_global == False
-            and self.ctx.port_android_version
-            and int(self.ctx.port_android_version) < 16
+            self.ctx.portrom.is_coloros_global == False
+            and self.ctx.portrom.android_version
+            and int(self.ctx.portrom.android_version) < 16
         ):
-            if self.ctx.base_vendor_brand and self.ctx.port_vendor_brand:
-                base_brand_lower = self.ctx.base_vendor_brand.lower()
-                port_brand_lower = self.ctx.port_vendor_brand.lower()
+            if self.ctx.baserom.vendor_brand and self.ctx.portrom.vendor_brand:
+                base_brand_lower = self.ctx.baserom.vendor_brand.lower()
+                port_brand_lower = self.ctx.portrom.vendor_brand.lower()
                 if base_brand_lower != port_brand_lower:
                     content = system_ext_prop.read_text(
                         encoding="utf-8", errors="ignore"

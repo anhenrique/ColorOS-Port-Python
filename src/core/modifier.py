@@ -657,16 +657,13 @@ class SystemModifier:
         # Build paths for hierarchical config loading
         paths = [Path("devices/common") / filename]
 
-        if (
-            hasattr(self.ctx, "base_chipset_family")
-            and self.ctx.base_chipset_family != "unknown"
-        ):
+        if self.ctx.baserom.chipset_family != "unknown":
             paths.append(
-                Path(f"devices/chipset/{self.ctx.base_chipset_family}") / filename
+                Path(f"devices/chipset/{self.ctx.baserom.chipset_family}") / filename
             )
 
-        if hasattr(self.ctx, "base_device_code") and self.ctx.base_device_code:
-            device_id = self.ctx.base_device_code.upper()
+        if self.ctx.baserom.device_code:
+            device_id = self.ctx.baserom.device_code.upper()
             paths.append(Path(f"devices/target/{device_id}") / filename)
 
         # Use enhanced ConfigMerger
@@ -697,32 +694,32 @@ class SystemModifier:
     def _build_condition_context(self) -> BuildContext:
         """
         Build a condition context from the current build context.
-        This bridges the old context attributes to the new condition system.
+        This bridges the RomPackage attributes to the condition system.
         """
         ctx = BuildContext()
 
-        # Copy ROM type flags
-        ctx.port_is_coloros = getattr(self.ctx, "port_is_coloros", False)
-        ctx.port_is_coloros_global = getattr(self.ctx, "port_is_coloros_global", False)
-        ctx.port_is_oos = getattr(self.ctx, "port_is_oos", False)
+        # Copy ROM type flags from portrom
+        ctx.port_is_coloros = self.ctx.portrom.is_coloros
+        ctx.port_is_coloros_global = self.ctx.portrom.is_coloros_global
+        ctx.port_is_oos = self.ctx.portrom.is_oos
 
-        # Copy base ROM type flags
-        ctx.base_is_coloros = getattr(self.ctx, "base_is_coloros", False)
-        ctx.base_is_coloros_cn = getattr(self.ctx, "base_is_coloros_cn", False)
-        ctx.base_is_coloros_global = getattr(self.ctx, "base_is_coloros_global", False)
-        ctx.base_is_oos = getattr(self.ctx, "base_is_oos", False)
+        # Copy base ROM type flags from baserom
+        ctx.base_is_coloros = self.ctx.baserom.is_coloros
+        ctx.base_is_coloros_cn = self.ctx.baserom.is_coloros
+        ctx.base_is_coloros_global = self.ctx.baserom.is_coloros_global
+        ctx.base_is_oos = self.ctx.baserom.is_oos
 
         # Copy version info
-        ctx.port_android_version = int(getattr(self.ctx, "port_android_version", 14))
-        ctx.base_android_version = int(getattr(self.ctx, "base_android_version", 14))
-        ctx.port_oplusrom_version = str(getattr(self.ctx, "port_oplusrom_version", ""))
+        port_ver = self.ctx.portrom.android_version
+        ctx.port_android_version = int(port_ver) if port_ver else 14
+        base_ver = self.ctx.baserom.android_version
+        ctx.base_android_version = int(base_ver) if base_ver else 14
+        ctx.port_oplusrom_version = str(self.ctx.portrom.oplusrom_version or "")
 
-        # Copy region and chipset info
-        ctx.base_regionmark = str(getattr(self.ctx, "base_regionmark", ""))
-        ctx.base_chipset_family = str(
-            getattr(self.ctx, "base_chipset_family", "unknown")
-        )
-        ctx.base_device_code = str(getattr(self.ctx, "base_device_code", ""))
+        # Copy region and chipset info from baserom
+        ctx.base_regionmark = str(self.ctx.baserom.region_mark or "")
+        ctx.base_chipset_family = str(self.ctx.baserom.chipset_family or "unknown")
+        ctx.base_device_code = str(self.ctx.baserom.device_code or "")
 
         return ctx
 
