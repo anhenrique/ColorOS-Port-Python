@@ -357,8 +357,8 @@ def main():
                 logger.info("Super image packing complete.")
             else:
                 packer.pack_all(pack_type="EROFS", is_rw=False)
-                packer.pack_ota_payload()
-                logger.info("OTA payload packing complete.")
+                packer.pack_ota_package()
+                logger.info("OTA package packing complete.")
 
         logger.info("Porting process (Stage 1-4) complete.")
 

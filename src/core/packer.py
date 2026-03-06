@@ -849,11 +849,15 @@ class Repacker:
             except Exception as e:
                 self.logger.warning(f"Failed to generate map for {part_name}: {e}")
 
-    def pack_ota_payload(self):
+    def pack_ota_package(self):
         """
-        Pack AOSP OTA payload (generate payload.bin zip)
+        Pack OTA package (supports both A/B payload and A-only formats)
         """
-        self.logger.info("Starting OTA Payload packing...")
+        is_ab = self.ctx.is_ab_device
+        if is_ab:
+            self.logger.info("Starting A/B OTA (payload) packing...")
+        else:
+            self.logger.info("Starting A-only OTA packing...")
 
         if self.product_out.exists():
             shutil.rmtree(self.product_out)
@@ -861,11 +865,16 @@ class Repacker:
         self.images_out.mkdir(parents=True, exist_ok=True)
         self.meta_out.mkdir(parents=True, exist_ok=True)
 
-        for part in ["SYSTEM", "SYSTEM_EXT", "PRODUCT", "VENDOR", "ODM", "MY_PRODUCT", "MY_MANIFEST", "MY_STOCK", "MY_REGION", "MY_CARRIER", "MY_HEYTAP", "MY_BIGBALL", "MY_ENGINEERING", "MY_PRELOAD", "MY_COMPANY"]:
+        # Base partitions for all OTA types
+        base_parts = ["SYSTEM", "SYSTEM_EXT", "PRODUCT", "VENDOR", "ODM", "MY_PRODUCT", "MY_MANIFEST", "MY_STOCK", "MY_REGION", "MY_CARRIER", "MY_HEYTAP", "MY_BIGBALL", "MY_ENGINEERING"]
+
+        # A/B devices need additional partitions for third-party super image support
+        if is_ab:
+            base_parts.extend(["MY_PRELOAD", "MY_COMPANY"])
+
+        for part in base_parts:
             (self.product_out / part).mkdir(exist_ok=True)
 
-        # For A-only devices, generate map files before collecting images
-        is_ab = self.ctx.is_ab_device
         if not is_ab:
             self.logger.info("Generating map files for A-only OTA...")
             self._generate_map_files()
