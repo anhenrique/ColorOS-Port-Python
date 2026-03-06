@@ -219,25 +219,50 @@ class PropCopyStrategy(PropStrategy):
             from_partition = prop.get("from_partition", "my_manifest")
             condition = prop.get("condition")
             
+            logger.debug(f"PropCopy: Processing {key} from {from_partition}")
+            
             # Read from baserom
             value = self._read_from_baserom(from_partition, key)
             if not value:
                 logger.warning(f"PropCopy: {key} not found in baserom {from_partition}")
                 continue
             
+            logger.debug(f"PropCopy: Found {key}={value} in baserom")
+            
             # Check condition
             if condition == "not_in_manifest":
                 manifest_prop = self.ctx.baserom.extracted_dir / "my_manifest" / "build.prop"
                 if self._prop_exists(manifest_prop, key):
+                    logger.debug(f"PropCopy: Skipping {key} (already in manifest)")
                     continue
             
             # Write to same partition in target
-            target_file = target_dir / from_partition / "build.prop"
-            if target_file.exists():
-                self._update_or_append(target_file, key, value)
-                logger.info(f"PropCopy: Copied {key}={value} to {from_partition}")
+            target_partition_dir = target_dir / from_partition
+            target_file = self._find_build_prop(target_partition_dir)
+            
+            if not target_file.exists():
+                # Create if it's my_manifest
+                if from_partition == "my_manifest":
+                    target_file.parent.mkdir(parents=True, exist_ok=True)
+                    target_file.write_text("", encoding="utf-8")
+                else:
+                    logger.warning(f"PropCopy: Target file not found for {from_partition}")
+                    continue
+            
+            self._update_or_append(target_file, key, value)
+            logger.info(f"PropCopy: Copied {key}={value} to {target_file}")
         
         return True
+    
+    def _find_build_prop(self, partition_dir: Path) -> Path:
+        """Find build.prop in partition directory."""
+        # Check direct path first
+        direct = partition_dir / "build.prop"
+        if direct.exists():
+            return direct
+        # Check etc/ subdirectory
+        nested = partition_dir / "etc" / "build.prop"
+        return nested
     
     def _read_from_baserom(self, partition: str, key: str) -> Optional[str]:
         part_dir = self.ctx.baserom.extracted_dir / partition
