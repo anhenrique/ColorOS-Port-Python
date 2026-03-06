@@ -22,11 +22,17 @@ A Python-based porting tool for ColorOS, created with AI Large Language Models (
 - **Context-Aware Architecture**: Uses a `Context` object to manage the entire porting lifecycle.
 - **Modular Design**: Separates concerns into distinct modules (`rom`, `props`, `patcher`, `packer`).
 - **Configuration Driven**: Uses JSON configuration files for device-specific settings.
+- **Performance Optimized**:
+    - Property file caching with `PropCache` class
+    - Batch property updates reducing file I/O
+    - Baserom property pre-loading for faster access
+    - Exclusion patterns for unnecessary directories
 - **Automated Patching**:
     - `PropertyModifier`: Automatically syncs properties between Base and Port ROMs.
     - `SmaliPatcher`: Decompiles and patches `services.jar` and `framework.jar`.
 - **Advanced Repacking**: Supports packing partitions as EROFS or EXT4, and generating `super.img` or OTA `payload.bin`.
 - **Enhanced Configuration Framework**: New validation, flexible conditions, and dependency management.
+- **Comprehensive Error Handling**: Graceful error recovery with detailed logging.
 
 ## 📱 Supported Devices
 
@@ -404,6 +410,49 @@ The property modification system (`PropertyModifier`) uses a configuration-drive
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### Performance Optimizations
+
+The property modification system includes several performance optimizations:
+
+| Optimization | Description | Impact |
+|--------------|-------------|---------|
+| **File Caching** | `PropCache` class with `lru_cache` for build.prop file paths and contents | Reduces file system scans from O(n) to O(1) |
+| **Batch Processing** | Group properties by target file for batch updates | Reduces file I/O operations |
+| **Baserom Property Cache** | Pre-load all baserom properties into memory | Eliminates repeated file searches |
+| **Exclusion Patterns** | Skip system_dlkm/odm_dlkm directories | Reduces unnecessary processing |
+| **Error Recovery** | Continue processing other files if one fails | Improves reliability |
+
+### Enhanced Error Handling
+
+All strategies now include comprehensive error handling:
+
+- **Unified Exception Handling**: All strategies catch and log exceptions gracefully
+- **Detailed Debug Logging**: Condition checks and operations are fully logged
+- **Operation Statistics**: Track number of modified files and properties
+- **Context Value Error Recovery**: Return None instead of crashing on missing attributes
+
+### Configuration Validation
+
+Validate your props.json configuration:
+
+```bash
+python3 -c "
+from src.core.config_schema import validate_config
+valid, errors = validate_config('devices/common/props.json')
+if valid:
+    print('✓ Configuration is valid')
+else:
+    for error in errors:
+        print(f'✗ {error}')
+"
+```
+
+Validation includes:
+- Version field check
+- Strategy type validation (string_replace, prop_set, prop_copy, watermark, fingerprint)
+- Config structure validation per strategy type
+- Property definition validation (key, value/source/template)
+
 ### Built-in Strategies
 
 | Strategy | Function | Description |
@@ -533,6 +582,31 @@ Then use it in `props.json`:
     }
   ]
 }
+```
+
+### Utility Functions
+
+The `prop_utils.py` module provides utility functions for property manipulation:
+
+```python
+from src.core.prop_utils import (
+    PropCache,                    # File caching for performance
+    update_or_append_prop,        # Update or append single property
+    read_prop_value,             # Read single property value
+    batch_update_props,          # Batch update multiple properties
+    read_prop_to_dict            # Read entire file as dict
+)
+
+# Example: Using PropCache
+cache = PropCache(Path("build/target"))
+prop_files = cache.get_all_prop_files(exclude_patterns=("system_dlkm",))
+
+# Example: Batch update
+updates = {
+    "ro.build.display.id": "ColorOS 15",
+    "ro.product.model": "OP8T"
+}
+batch_update_props(Path("build/target/system/build.prop"), updates)
 ```
 
 ### Hierarchical Configuration

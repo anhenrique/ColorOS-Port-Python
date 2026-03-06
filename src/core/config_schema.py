@@ -1,6 +1,7 @@
 """
 简化版配置验证模块
 """
+
 import json
 from pathlib import Path
 from typing import Dict, List, Tuple, Any, Optional
@@ -12,7 +13,7 @@ def validate_replacements(data: Dict) -> List[str]:
     if "replacements" not in data:
         errors.append("Missing required field 'replacements'")
         return errors
-    
+
     for i, rule in enumerate(data["replacements"]):
         if "description" not in rule:
             errors.append(f"Rule [{i}]: Missing 'description'")
@@ -25,14 +26,96 @@ def validate_features(data: Dict) -> List[str]:
     """验证 features.json"""
     errors = []
     valid_keys = {
-        "oplus_feature", "app_feature", "permission_feature",
-        "permission_oplus_feature", "features_remove", "features_remove_force",
-        "features_remove_conditional", "xml_features", "build_props",
-        "props_remove", "props_add"
+        "oplus_feature",
+        "app_feature",
+        "permission_feature",
+        "permission_oplus_feature",
+        "features_remove",
+        "features_remove_force",
+        "features_remove_conditional",
+        "xml_features",
+        "build_props",
+        "props_remove",
+        "props_add",
     }
     for key in data.keys():
         if key not in valid_keys:
             errors.append(f"Unknown field: '{key}'")
+    return errors
+
+
+def validate_props(data: Dict) -> List[str]:
+    """验证 props.json"""
+    errors = []
+
+    # Check version
+    if "version" not in data:
+        errors.append("Missing required field 'version'")
+
+    # Validate rules
+    rules = data.get("rules", data.get("strategies", []))
+    if not isinstance(rules, list):
+        errors.append("'rules' must be a list")
+        return errors
+
+    valid_strategies = {
+        "string_replace",
+        "prop_set",
+        "prop_copy",
+        "watermark",
+        "fingerprint",
+    }
+
+    for i, rule in enumerate(rules):
+        rule_prefix = f"Rule [{i}]"
+
+        if "name" not in rule:
+            errors.append(f"{rule_prefix}: Missing 'name'")
+            continue
+
+        name = rule["name"]
+        if name not in valid_strategies:
+            errors.append(f"{rule_prefix}: Unknown strategy '{name}'")
+
+        # Validate config based on strategy type
+        config = rule.get("config", {})
+
+        if name == "string_replace":
+            if "mappings" not in config:
+                errors.append(f"{rule_prefix}: 'string_replace' requires 'mappings'")
+            elif not isinstance(config["mappings"], list):
+                errors.append(f"{rule_prefix}: 'mappings' must be a list")
+
+        elif name == "prop_set":
+            if "properties" not in config:
+                errors.append(f"{rule_prefix}: 'prop_set' requires 'properties'")
+            elif not isinstance(config["properties"], list):
+                errors.append(f"{rule_prefix}: 'properties' must be a list")
+            else:
+                for j, prop in enumerate(config["properties"]):
+                    if "key" not in prop:
+                        errors.append(f"{rule_prefix}: Property [{j}] missing 'key'")
+                    if not any(k in prop for k in ["value", "source", "template"]):
+                        errors.append(
+                            f"{rule_prefix}: Property [{j}] must have 'value', 'source', or 'template'"
+                        )
+
+        elif name == "prop_copy":
+            if "properties" not in config:
+                errors.append(f"{rule_prefix}: 'prop_copy' requires 'properties'")
+            elif not isinstance(config["properties"], list):
+                errors.append(f"{rule_prefix}: 'properties' must be a list")
+            else:
+                for j, prop in enumerate(config["properties"]):
+                    if "key" not in prop:
+                        errors.append(f"{rule_prefix}: Property [{j}] missing 'key'")
+
+        elif name == "watermark":
+            required = ["target_key", "template"]
+            for field in required:
+                if field not in config:
+                    errors.append(f"{rule_prefix}: 'watermark' requires '{field}'")
+
     return errors
 
 
@@ -51,36 +134,45 @@ def validate_config(config_path: str) -> Tuple[bool, List[str]]:
     path = Path(config_path)
     if not path.exists():
         return False, [f"File not found: {config_path}"]
-    
+
     try:
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
         return False, [f"Invalid JSON: {e}"]
-    
+
     filename = path.name
     errors = []
-    
+
     if filename == "replacements.json":
         errors = validate_replacements(data)
     elif filename == "features.json":
         errors = validate_features(data)
     elif filename == "port_config.json":
         errors = validate_port_config(data)
+    elif filename == "props.json":
+        errors = validate_props(data)
     else:
         return True, []
-    
+
     return len(errors) == 0, errors
 
 
-def validate_all_configs(base_dir: str = "devices") -> Dict[str, Tuple[bool, List[str]]]:
+def validate_all_configs(
+    base_dir: str = "devices",
+) -> Dict[str, Tuple[bool, List[str]]]:
     """验证所有配置文件"""
     results = {}
     base = Path(base_dir)
-    
-    for pattern in ["**/replacements.json", "**/features.json", "**/port_config.json"]:
+
+    for pattern in [
+        "**/replacements.json",
+        "**/features.json",
+        "**/port_config.json",
+        "**/props.json",
+    ]:
         for config_file in base.glob(pattern):
             is_valid, errors = validate_config(str(config_file))
             results[str(config_file)] = (is_valid, errors)
-    
+
     return results
