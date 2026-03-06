@@ -406,34 +406,58 @@ The property modification system (`PropertyModifier`) uses a configuration-drive
 
 ### Built-in Strategies
 
-| Strategy | Description | Priority |
-|----------|-------------|----------|
-| `timezone` | Set timezone to Asia/Shanghai | 10 |
-| `global_replacement` | Replace device codes, models, names | 20 |
-| `display_id` | Update ro.build.display.id | 30 |
-| `region_lock` | Disable region lock properties | 40 |
-| `watermark` | Add "Ported By" watermark | 50 |
-| `market_name` | Set market names from base ROM | 60 |
-| `magic_model` | Set AI magic model properties | 70 |
-| `lcd_density` | Set LCD density from base | 80 |
-| `system_ext_brand` | Update system_ext brand | 90 |
-| `fingerprint` | Regenerate build fingerprint | 100 |
+| Strategy | Function | Description |
+|----------|----------|-------------|
+| `string_replace` | Global Replacement | Replace device code, model, name strings |
+| `prop_set` | Property Setting | Set properties from static values or context |
+| `prop_copy` | Property Copy | Copy critical properties from baserom |
+| `magic_model` | AI Model Props | Set magic model properties with template |
+| `watermark` | Version Watermark | Add "Ported By" watermark |
+| `fingerprint` | Fingerprint | Regenerate build fingerprint |
 
 ### Configuration Format
 
+Rules are grouped by **function**, not by individual property:
+
 ```json
 {
-  "version": 1,
-  "strategies": [
+  "version": 2,
+  "rules": [
     {
-      "name": "strategy_name",
+      "name": "string_replace",
       "enabled": true,
-      "priority": 50,
-      "condition": {
-        "port_android_version_lt": 16
-      },
+      "priority": 10,
       "config": {
-        // Strategy-specific configuration
+        "mappings": [
+          {"from": "port_device_code", "to": "base_device_code"},
+          {"from": "port_product_model", "to": "base_product_model"}
+        ]
+      }
+    },
+    {
+      "name": "prop_set",
+      "enabled": true,
+      "priority": 20,
+      "config": {
+        "properties": [
+          {"key": "persist.sys.timezone", "value": "Asia/Shanghai"},
+          {"key": "ro.build.display.id", "source": "target_display_id"},
+          {"key": "ro.sf.lcd_density", "source": "base_lcd_density", "target": "my_product/build.prop"}
+        ]
+      }
+    },
+    {
+      "name": "prop_copy",
+      "enabled": true,
+      "priority": 25,
+      "config": {
+        "properties": [
+          {
+            "key": "ro.product.first_api_level",
+            "from_partition": "my_manifest",
+            "comment": "Critical for boot"
+          }
+        ]
       }
     }
   ]

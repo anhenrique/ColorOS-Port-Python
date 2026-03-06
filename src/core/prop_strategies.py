@@ -1,13 +1,20 @@
 """
-Property modification strategies - Implements configuration-driven prop modification.
+Property modification strategies - Function-based design.
+
+High-level strategies grouped by function:
+- string_replace: Global string replacements (device code, model, etc.)
+- prop_set: Set property values directly
+- prop_copy: Copy properties from baserom to target
+- magic_model: Set AI magic model properties with template
+- watermark: Add version watermark
+- fingerprint: Regenerate build fingerprint
 """
 
 import re
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Callable
-from string import Formatter
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +31,6 @@ class PropStrategy(ABC):
     
     @abstractmethod
     def apply(self, target_dir: Path) -> bool:
-        """
-        Apply the strategy to the target directory.
-        
-        Returns:
-            True if successful, False otherwise
-        """
         pass
     
     def check_condition(self) -> bool:
@@ -38,12 +39,12 @@ class PropStrategy(ABC):
         if not condition:
             return True
         
+        # Simple condition evaluation
         for key, expected in condition.items():
             actual = self._get_context_value(key)
             if actual is None:
                 return False
             
-            # Handle comparison operators
             if key.endswith("_lt"):
                 if actual >= expected:
                     return False
@@ -65,8 +66,7 @@ class PropStrategy(ABC):
         return True
     
     def _get_context_value(self, key: str) -> Any:
-        """Get value from context using dot notation or special mappings."""
-        # Handle special key mappings
+        """Get value from context using key mapping."""
         mappings = {
             "port_device_code": lambda: self.ctx.portrom.device_code,
             "port_product_model": lambda: self.ctx.portrom.product_model,
@@ -95,49 +95,17 @@ class PropStrategy(ABC):
                 return mappings[key]()
             except (AttributeError, TypeError, ValueError):
                 return None
-        
-        # Try direct attribute access
-        try:
-            return getattr(self.ctx, key, None)
-        except:
-            return None
+        return getattr(self.ctx, key, None)
 
 
-class TimezoneStrategy(PropStrategy):
-    """Strategy for setting timezone property."""
+class StringReplaceStrategy(PropStrategy):
+    """
+    Global string replacement across all build.prop files.
+    Replaces port values with base values (e.g., device code, model).
+    """
     
     def apply(self, target_dir: Path) -> bool:
-        key = self.config["config"]["key"]
-        value = self.config["config"]["value"]
-        
-        modified_count = 0
-        for prop_file in target_dir.rglob("build.prop"):
-            if self._update_prop_file(prop_file, key, value):
-                modified_count += 1
-        
-        logger.debug(f"TimezoneStrategy: Modified {modified_count} files")
-        return True
-    
-    def _update_prop_file(self, prop_file: Path, key: str, value: str) -> bool:
-        if not prop_file.exists():
-            return False
-        
-        content = prop_file.read_text(encoding="utf-8", errors="ignore")
-        if key not in content:
-            return False
-        
-        new_content = re.sub(rf"^{re.escape(key)}=.*", f"{key}={value}", content, flags=re.MULTILINE)
-        if new_content != content:
-            prop_file.write_text(new_content, encoding="utf-8")
-            return True
-        return False
-
-
-class GlobalReplacementStrategy(PropStrategy):
-    """Strategy for global string replacements across all build.prop files."""
-    
-    def apply(self, target_dir: Path) -> bool:
-        mappings = self.config["config"]["mappings"]
+        mappings = self.config["config"].get("mappings", [])
         
         # Build replacement pairs
         replacements = []
@@ -148,10 +116,8 @@ class GlobalReplacementStrategy(PropStrategy):
                 replacements.append((old_val, new_val))
         
         if not replacements:
-            logger.debug("GlobalReplacementStrategy: No replacements needed")
             return True
         
-        modified_count = 0
         for prop_file in target_dir.rglob("build.prop"):
             if "system_dlkm" in str(prop_file) or "odm_dlkm" in str(prop_file):
                 continue
@@ -164,58 +130,175 @@ class GlobalReplacementStrategy(PropStrategy):
             
             if content != original:
                 prop_file.write_text(content, encoding="utf-8")
-                modified_count += 1
         
-        logger.debug(f"GlobalReplacementStrategy: Modified {modified_count} files")
         return True
 
 
-class DisplayIdStrategy(PropStrategy):
-    """Strategy for updating display ID."""
+class PropSetStrategy(PropStrategy):
+    """
+    Set property values directly.
+    Supports static values, context sources, and partition-specific targets.
+    """
     
     def apply(self, target_dir: Path) -> bool:
-        key = self.config["config"]["key"]
-        value = self._get_context_value(self.config["config"]["source"])
+        properties = self.config["config"].get("properties", [])
         
-        if not value:
-            logger.debug("DisplayIdStrategy: No display ID available")
+        for prop in properties:
+            key = prop["key"]
+            
+            # Get value: static value or from context
+            if "value" in prop:
+                value = prop["value"]
+            elif "source" in prop:
+                value = self._get_context_value(prop["source"])
+            else:
+                continue
+            
+            if not value:
+                continue
+            
+            # Determine target
+            if "target" in prop:
+                # Specific partition/file
+                target_file = target_dir / prop["target"]
+                if target_file.exists():
+                    self._update_or_append(target_file, key, value)
+            else:
+                # All build.prop files
+                for prop_file in target_dir.rglob("build.prop"):
+                    if key in prop_file.read_text(encoding="utf-8", errors="ignore"):
+                        self._update_or_append(prop_file, key, value)
+        
+        return True
+    
+    def _update_or_append(self, prop_file: Path, key: str, value: str):
+        content = prop_file.read_text(encoding="utf-8", errors="ignore")
+        
+        if re.search(rf"^{re.escape(key)}=", content, re.MULTILINE):
+            content = re.sub(rf"^{re.escape(key)}=.*", f"{key}={value}", content, flags=re.MULTILINE)
+        else:
+            if content and not content.endswith("\n"):
+                content += "\n"
+            content += f"{key}={value}\n"
+        
+        prop_file.write_text(content, encoding="utf-8")
+
+
+class PropCopyStrategy(PropStrategy):
+    """
+    Copy properties from baserom to target partitions.
+    Used for critical properties that must match baserom (e.g., first_api_level).
+    """
+    
+    def apply(self, target_dir: Path) -> bool:
+        properties = self.config["config"].get("properties", [])
+        
+        for prop in properties:
+            key = prop["key"]
+            from_partition = prop.get("from_partition", "my_manifest")
+            condition = prop.get("condition")
+            
+            # Read from baserom
+            value = self._read_from_baserom(from_partition, key)
+            if not value:
+                logger.warning(f"PropCopy: {key} not found in baserom {from_partition}")
+                continue
+            
+            # Check condition
+            if condition == "not_in_manifest":
+                manifest_prop = self.ctx.baserom.extracted_dir / "my_manifest" / "build.prop"
+                if self._prop_exists(manifest_prop, key):
+                    continue
+            
+            # Write to same partition in target
+            target_file = target_dir / from_partition / "build.prop"
+            if target_file.exists():
+                self._update_or_append(target_file, key, value)
+                logger.info(f"PropCopy: Copied {key}={value} to {from_partition}")
+        
+        return True
+    
+    def _read_from_baserom(self, partition: str, key: str) -> Optional[str]:
+        part_dir = self.ctx.baserom.extracted_dir / partition
+        if not part_dir.exists():
+            return None
+        
+        for prop_file in part_dir.rglob("build.prop"):
+            value = self._read_prop_value(prop_file, key)
+            if value:
+                return value
+        return None
+    
+    def _read_prop_value(self, file_path: Path, key: str) -> Optional[str]:
+        if not file_path.exists():
+            return None
+        try:
+            with open(file_path, "r", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and line.startswith(f"{key}="):
+                        return line.split("=", 1)[1].strip()
+        except:
+            pass
+        return None
+    
+    def _prop_exists(self, file_path: Path, key: str) -> bool:
+        return self._read_prop_value(file_path, key) is not None
+    
+    def _update_or_append(self, prop_file: Path, key: str, value: str):
+        content = prop_file.read_text(encoding="utf-8", errors="ignore")
+        
+        if re.search(rf"^{re.escape(key)}=", content, re.MULTILINE):
+            content = re.sub(rf"^{re.escape(key)}=.*", f"{key}={value}", content, flags=re.MULTILINE)
+        else:
+            if content and not content.endswith("\n"):
+                content += "\n"
+            content += f"{key}={value}\n"
+        
+        prop_file.write_text(content, encoding="utf-8")
+
+
+class MagicModelStrategy(PropStrategy):
+    """Set AI magic model properties with template."""
+    
+    def apply(self, target_dir: Path) -> bool:
+        cfg = self.config["config"]
+        template = cfg.get("template", "MODEL:{device_code},BRAND:{product_model}")
+        properties = cfg.get("properties", [])
+        
+        device_code = self.ctx.baserom.device_code or ""
+        product_model = self.ctx.baserom.product_model or ""
+        
+        value = template.format(device_code=device_code, product_model=product_model)
+        
+        my_product = target_dir / "my_product"
+        if not my_product.exists():
             return True
         
-        for prop_file in target_dir.rglob("build.prop"):
-            content = prop_file.read_text(encoding="utf-8", errors="ignore")
-            if key in content:
-                new_content = re.sub(rf"^{re.escape(key)}=.*", f"{key}={value}", content, flags=re.MULTILINE)
-                if new_content != content:
-                    prop_file.write_text(new_content, encoding="utf-8")
+        bruce_prop = my_product / "etc" / "bruce" / "build.prop"
+        
+        for key in properties:
+            self._update_or_append(bruce_prop, key, value)
         
         return True
-
-
-class RegionLockStrategy(PropStrategy):
-    """Strategy for disabling region lock."""
     
-    def apply(self, target_dir: Path) -> bool:
-        properties = self.config["config"]["properties"]
+    def _update_or_append(self, prop_file: Path, key: str, value: str):
+        if not prop_file.exists():
+            prop_file.parent.mkdir(parents=True, exist_ok=True)
+            prop_file.write_text("", encoding="utf-8")
         
-        for prop_file in target_dir.rglob("build.prop"):
-            content = prop_file.read_text(encoding="utf-8", errors="ignore")
-            modified = False
-            
-            for prop in properties:
-                key = prop["key"]
-                value = prop["value"]
-                if key in content:
-                    content = re.sub(rf"^{re.escape(key)}=.*", f"{key}={value}", content, flags=re.MULTILINE)
-                    modified = True
-            
-            if modified:
-                prop_file.write_text(content, encoding="utf-8")
+        content = prop_file.read_text(encoding="utf-8", errors="ignore")
         
-        return True
+        if re.search(rf"^{re.escape(key)}=", content, re.MULTILINE):
+            content = re.sub(rf"^{re.escape(key)}=.*", f"{key}={value}", content, flags=re.MULTILINE)
+        else:
+            content += f"\n{key}={value}\n"
+        
+        prop_file.write_text(content, encoding="utf-8")
 
 
 class WatermarkStrategy(PropStrategy):
-    """Strategy for adding watermark to ROM version."""
+    """Add watermark to ROM version display."""
     
     def apply(self, target_dir: Path) -> bool:
         cfg = self.config["config"]
@@ -224,24 +307,23 @@ class WatermarkStrategy(PropStrategy):
         author = cfg.get("author", "BT")
         skip_if_contains = cfg.get("skip_if_contains", "")
         
-        # Find target files
         my_product = target_dir / "my_product"
         if not my_product.exists():
             return True
         
         prop_main = my_product / "build.prop"
         prop_bruce = my_product / "etc" / "bruce" / "build.prop"
-        
         target_file = prop_main if prop_main.exists() else prop_bruce
+        
         if not target_file.exists():
             return True
         
-        value = self._read_prop_value(target_file, target_key)
-        if not value or skip_if_contains in value:
+        current_value = self._read_prop_value(target_file, target_key)
+        if not current_value or skip_if_contains in current_value:
             return True
         
-        new_value = template.format(value=value, author=author)
-        self._add_or_replace_prop(target_file, target_key, new_value)
+        new_value = template.format(value=current_value, author=author)
+        self._update_or_append(target_file, target_key, new_value)
         
         return True
     
@@ -258,11 +340,7 @@ class WatermarkStrategy(PropStrategy):
             pass
         return None
     
-    def _add_or_replace_prop(self, prop_file: Path, key: str, value: str):
-        if not prop_file.exists():
-            prop_file.parent.mkdir(parents=True, exist_ok=True)
-            prop_file.write_text("", encoding="utf-8")
-        
+    def _update_or_append(self, prop_file: Path, key: str, value: str):
         content = prop_file.read_text(encoding="utf-8", errors="ignore")
         
         if re.search(rf"^{re.escape(key)}=", content, re.MULTILINE):
@@ -271,183 +349,31 @@ class WatermarkStrategy(PropStrategy):
             content += f"\n{key}={value}\n"
         
         prop_file.write_text(content, encoding="utf-8")
-
-
-class MarketNameStrategy(PropStrategy):
-    """Strategy for setting market names."""
-    
-    def apply(self, target_dir: Path) -> bool:
-        my_product = target_dir / "my_product"
-        if not my_product.exists():
-            return True
-        
-        bruce_prop = my_product / "etc" / "bruce" / "build.prop"
-        
-        # Check manifest if configured
-        if self.config["config"].get("check_manifest", True):
-            manifest_prop = self.ctx.baserom.extracted_dir / "my_manifest" / "build.prop"
-            manifest_props = self._read_props_to_dict(manifest_prop)
-        else:
-            manifest_props = {}
-        
-        for prop_config in self.config["config"]["properties"]:
-            key = prop_config["key"]
-            source = prop_config["source"]
-            
-            # Skip if in manifest
-            key_variants = [key.replace("ro.vendor.", "ro."), key]
-            if any(v in manifest_props for v in key_variants):
-                continue
-            
-            value = self._get_context_value(source)
-            if value:
-                self._add_or_replace_prop(bruce_prop, key, value)
-        
-        return True
-    
-    def _read_props_to_dict(self, file_path: Path) -> Dict[str, str]:
-        props = {}
-        if not file_path.exists():
-            return props
-        try:
-            with open(file_path, "r", errors="ignore") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, val = line.split("=", 1)
-                        props[key.strip()] = val.strip()
-        except:
-            pass
-        return props
-    
-    def _add_or_replace_prop(self, prop_file: Path, key: str, value: str):
-        if not prop_file.exists():
-            prop_file.parent.mkdir(parents=True, exist_ok=True)
-            prop_file.write_text("", encoding="utf-8")
-        
-        content = prop_file.read_text(encoding="utf-8", errors="ignore")
-        
-        if re.search(rf"^{re.escape(key)}=", content, re.MULTILINE):
-            content = re.sub(rf"^{re.escape(key)}=.*", f"{key}={value}", content, flags=re.MULTILINE)
-        else:
-            content += f"\n{key}={value}\n"
-        
-        prop_file.write_text(content, encoding="utf-8")
-
-
-class MagicModelStrategy(PropStrategy):
-    """Strategy for setting magic model properties."""
-    
-    def apply(self, target_dir: Path) -> bool:
-        my_product = target_dir / "my_product"
-        if not my_product.exists():
-            return True
-        
-        bruce_prop = my_product / "etc" / "bruce" / "build.prop"
-        
-        device_code = self.ctx.baserom.device_code or ""
-        product_model = self.ctx.baserom.product_model or ""
-        
-        for prop_config in self.config["config"]["properties"]:
-            key = prop_config["key"]
-            template = prop_config["template"]
-            value = template.format(device_code=device_code, product_model=product_model)
-            self._add_or_replace_prop(bruce_prop, key, value)
-        
-        return True
-    
-    def _add_or_replace_prop(self, prop_file: Path, key: str, value: str):
-        if not prop_file.exists():
-            prop_file.parent.mkdir(parents=True, exist_ok=True)
-            prop_file.write_text("", encoding="utf-8")
-        
-        content = prop_file.read_text(encoding="utf-8", errors="ignore")
-        
-        if re.search(rf"^{re.escape(key)}=", content, re.MULTILINE):
-            content = re.sub(rf"^{re.escape(key)}=.*", f"{key}={value}", content, flags=re.MULTILINE)
-        else:
-            content += f"\n{key}={value}\n"
-        
-        prop_file.write_text(content, encoding="utf-8")
-
-
-class LcdDensityStrategy(PropStrategy):
-    """Strategy for setting LCD density."""
-    
-    def apply(self, target_dir: Path) -> bool:
-        key = self.config["config"]["key"]
-        value = self._get_context_value(self.config["config"]["source"])
-        
-        if not value:
-            return True
-        
-        target_file = self.config["config"].get("target_file", "my_product/build.prop")
-        prop_file = target_dir / target_file
-        
-        if prop_file.exists():
-            self._add_or_replace_prop(prop_file, key, value)
-        
-        return True
-    
-    def _add_or_replace_prop(self, prop_file: Path, key: str, value: str):
-        content = prop_file.read_text(encoding="utf-8", errors="ignore")
-        
-        if re.search(rf"^{re.escape(key)}=", content, re.MULTILINE):
-            content = re.sub(rf"^{re.escape(key)}=.*", f"{key}={value}", content, flags=re.MULTILINE)
-        else:
-            content += f"\n{key}={value}\n"
-        
-        prop_file.write_text(content, encoding="utf-8")
-
-
-class SystemExtBrandStrategy(PropStrategy):
-    """Strategy for setting system_ext brand."""
-    
-    def apply(self, target_dir: Path) -> bool:
-        cfg = self.config["config"]
-        file_path = target_dir / cfg["file"]
-        key = cfg["key"]
-        value = self._get_context_value(cfg["source"])
-        
-        if not value or not file_path.exists():
-            return True
-        
-        if cfg.get("transform") == "lowercase":
-            value = value.lower()
-        
-        content = file_path.read_text(encoding="utf-8", errors="ignore")
-        content = re.sub(rf"^{re.escape(key)}=.*", f"{key}={value}", content, flags=re.MULTILINE)
-        file_path.write_text(content, encoding="utf-8")
-        
-        return True
 
 
 class FingerprintStrategy(PropStrategy):
-    """Strategy for regenerating build fingerprint."""
+    """Regenerate build fingerprint and description."""
     
     def apply(self, target_dir: Path) -> bool:
         cfg = self.config["config"]
-        priority_partitions = cfg["priority_partitions"]
-        components = cfg["components"]
-        targets = cfg["targets"]
+        priority_partitions = cfg.get("priority_partitions", 
+            ["my_manifest", "my_product", "odm", "vendor", "product", "system_ext", "system"])
         
-        # Read component values
-        values = {}
-        for name, comp_config in components.items():
-            values[name] = self._get_prop_from_partitions(
-                target_dir, 
-                priority_partitions, 
-                comp_config["key"],
-                comp_config.get("default", "")
-            )
+        # Read components
+        brand = self._get_prop(target_dir, priority_partitions, "ro.product.brand", "OnePlus")
+        name = self._get_prop(target_dir, priority_partitions, "ro.product.name", "")
+        device = self._get_prop(target_dir, priority_partitions, "ro.product.device", "oplus")
+        version = self._get_prop(target_dir, priority_partitions, "ro.build.version.release", "")
+        build_id = self._get_prop(target_dir, priority_partitions, "ro.build.id", "")
+        incremental = self._get_prop(target_dir, priority_partitions, "ro.build.version.incremental", "")
+        build_type = self._get_prop(target_dir, priority_partitions, "ro.build.type", "user")
+        tags = self._get_prop(target_dir, priority_partitions, "ro.build.tags", "release-keys")
         
-        # Construct fingerprint
-        fingerprint = f"{values['brand']}/{values['name']}/{values['device']}:{values['version']}/{values['build_id']}/{values['incremental']}:{values['type']}/{values['tags']}"
-        description = f"{values['name']}-{values['type']} {values['version']} {values['build_id']} {values['incremental']} {values['tags']}"
+        fingerprint = f"{brand}/{name}/{device}:{version}/{build_id}/{incremental}:{build_type}/{tags}"
+        description = f"{name}-{build_type} {version} {build_id} {incremental} {tags}"
         
-        logger.info(f"New Fingerprint: {fingerprint}")
+        logger.info(f"Fingerprint: {fingerprint}")
         
-        # Build replacement mapping
         replacements = {
             "ro.build.fingerprint=": f"ro.build.fingerprint={fingerprint}",
             "ro.bootimage.build.fingerprint=": f"ro.bootimage.build.fingerprint={fingerprint}",
@@ -460,13 +386,12 @@ class FingerprintStrategy(PropStrategy):
             "ro.system.build.description=": f"ro.system.build.description={description}"
         }
         
-        # Apply to all build.prop files
         for prop_file in target_dir.rglob("build.prop"):
             self._apply_replacements(prop_file, replacements)
         
         return True
     
-    def _get_prop_from_partitions(self, target_dir: Path, partitions: List[str], key: str, default: str) -> str:
+    def _get_prop(self, target_dir: Path, partitions: List[str], key: str, default: str) -> str:
         for part in partitions:
             for prop_file in (target_dir / part).rglob("build.prop"):
                 try:
@@ -486,7 +411,7 @@ class FingerprintStrategy(PropStrategy):
             return
         
         new_lines = []
-        file_changed = False
+        changed = False
         
         for line in lines:
             original = line
@@ -497,7 +422,7 @@ class FingerprintStrategy(PropStrategy):
                 if stripped.startswith(prefix):
                     if original.strip() != new_val:
                         new_lines.append(new_val + "\n")
-                        file_changed = True
+                        changed = True
                     else:
                         new_lines.append(original)
                     replaced = True
@@ -506,23 +431,18 @@ class FingerprintStrategy(PropStrategy):
             if not replaced:
                 new_lines.append(original)
         
-        if file_changed:
+        if changed:
             with open(prop_file, 'w', encoding='utf-8') as f:
                 f.writelines(new_lines)
-            logger.debug(f"Updated fingerprint in {prop_file}")
 
 
 # Strategy registry
-STRATEGY_REGISTRY: Dict[str, type] = {
-    "timezone": TimezoneStrategy,
-    "global_replacement": GlobalReplacementStrategy,
-    "display_id": DisplayIdStrategy,
-    "region_lock": RegionLockStrategy,
-    "watermark": WatermarkStrategy,
-    "market_name": MarketNameStrategy,
+STRATEGY_REGISTRY = {
+    "string_replace": StringReplaceStrategy,
+    "prop_set": PropSetStrategy,
+    "prop_copy": PropCopyStrategy,
     "magic_model": MagicModelStrategy,
-    "lcd_density": LcdDensityStrategy,
-    "system_ext_brand": SystemExtBrandStrategy,
+    "watermark": WatermarkStrategy,
     "fingerprint": FingerprintStrategy,
 }
 
@@ -539,97 +459,3 @@ def create_strategy(config: Dict[str, Any], context: Any) -> Optional[PropStrate
         return None
     
     return strategy_class(config, context)
-
-
-class PropCopyStrategy(PropStrategy):
-    """
-    Generic strategy for copying properties from source to target files.
-    Supports reading from baserom partitions and writing to multiple target partitions.
-    """
-    
-    def apply(self, target_dir: Path) -> bool:
-        cfg = self.config["config"]
-        props = cfg.get("properties", [])
-        
-        for prop_config in props:
-            key = prop_config["key"]
-            source_partitions = prop_config.get("source_partitions", ["my_manifest"])
-            target_partitions = prop_config.get("target_partitions", ["vendor", "product", "system"])
-            default_value = prop_config.get("default")
-            
-            # Read value from baserom source partitions
-            value = self._read_from_baserom(source_partitions, key)
-            
-            if not value and default_value:
-                value = default_value
-            
-            if not value:
-                logger.warning(f"PropCopyStrategy: Could not find {key} in baserom")
-                continue
-            
-            # Write to target partitions
-            written = 0
-            for part in target_partitions:
-                part_dir = target_dir / part
-                if not part_dir.exists():
-                    continue
-                
-                for prop_file in part_dir.rglob("build.prop"):
-                    if self._update_or_append_prop(prop_file, key, value):
-                        written += 1
-                        logger.debug(f"PropCopyStrategy: Set {key}={value} in {prop_file}")
-            
-            if written > 0:
-                logger.info(f"PropCopyStrategy: Copied {key}={value} to {written} file(s)")
-        
-        return True
-    
-    def _read_from_baserom(self, partitions: List[str], key: str) -> Optional[str]:
-        """Read property value from baserom partitions."""
-        for part in partitions:
-            part_dir = self.ctx.baserom.extracted_dir / part
-            if not part_dir.exists():
-                continue
-            
-            for prop_file in part_dir.rglob("build.prop"):
-                value = self._read_prop_value(prop_file, key)
-                if value:
-                    return value
-        return None
-    
-    def _read_prop_value(self, file_path: Path, key: str) -> Optional[str]:
-        """Read a single property value from file."""
-        if not file_path.exists():
-            return None
-        try:
-            with open(file_path, "r", errors="ignore") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and line.startswith(f"{key}="):
-                        return line.split("=", 1)[1].strip()
-        except:
-            pass
-        return None
-    
-    def _update_or_append_prop(self, prop_file: Path, key: str, value: str) -> bool:
-        """Update existing property or append new one."""
-        if not prop_file.exists():
-            return False
-        
-        content = prop_file.read_text(encoding="utf-8", errors="ignore")
-        
-        if re.search(rf"^{re.escape(key)}=", content, re.MULTILINE):
-            # Update existing
-            content = re.sub(rf"^{re.escape(key)}=.*", f"{key}={value}", content, flags=re.MULTILINE)
-        else:
-            # Append new
-            if content and not content.endswith("\n"):
-                content += "\n"
-            content += f"{key}={value}\n"
-        
-        prop_file.write_text(content, encoding="utf-8")
-        return True
-
-
-# Register the new strategy
-STRATEGY_REGISTRY["prop_copy"] = PropCopyStrategy

@@ -405,34 +405,58 @@ print(f'条件通过：{evaluator.evaluate(rule, ctx)}')
 
 ### 内置策略
 
-| 策略 | 说明 | 优先级 |
-|------|------|--------|
-| `timezone` | 设置时区为 Asia/Shanghai | 10 |
-| `global_replacement` | 替换设备代码、型号、名称 | 20 |
-| `display_id` | 更新 ro.build.display.id | 30 |
-| `region_lock` | 禁用区域锁属性 | 40 |
-| `watermark` | 添加 "Ported By" 水印 | 50 |
-| `market_name` | 从底包设置市场名称 | 60 |
-| `magic_model` | 设置 AI 魔法模型属性 | 70 |
-| `lcd_density` | 从底包设置 LCD 密度 | 80 |
-| `system_ext_brand` | 更新 system_ext 品牌 | 90 |
-| `fingerprint` | 重新生成构建指纹 | 100 |
+| 策略 | 功能 | 说明 |
+|------|------|------|
+| `string_replace` | 全局替换 | 替换设备代码、型号、名称等字符串 |
+| `prop_set` | 属性设置 | 从静态值或上下文设置属性 |
+| `prop_copy` | 属性复制 | 从底包复制关键属性 |
+| `magic_model` | AI 模型属性 | 使用模板设置魔法模型属性 |
+| `watermark` | 版本水印 | 添加 "Ported By" 水印 |
+| `fingerprint` | 指纹生成 | 重新生成构建指纹 |
 
 ### 配置格式
 
+规则按**功能**分组，而不是按单个属性：
+
 ```json
 {
-  "version": 1,
-  "strategies": [
+  "version": 2,
+  "rules": [
     {
-      "name": "strategy_name",
+      "name": "string_replace",
       "enabled": true,
-      "priority": 50,
-      "condition": {
-        "port_android_version_lt": 16
-      },
+      "priority": 10,
       "config": {
-        // 策略特定的配置
+        "mappings": [
+          {"from": "port_device_code", "to": "base_device_code"},
+          {"from": "port_product_model", "to": "base_product_model"}
+        ]
+      }
+    },
+    {
+      "name": "prop_set",
+      "enabled": true,
+      "priority": 20,
+      "config": {
+        "properties": [
+          {"key": "persist.sys.timezone", "value": "Asia/Shanghai"},
+          {"key": "ro.build.display.id", "source": "target_display_id"},
+          {"key": "ro.sf.lcd_density", "source": "base_lcd_density", "target": "my_product/build.prop"}
+        ]
+      }
+    },
+    {
+      "name": "prop_copy",
+      "enabled": true,
+      "priority": 25,
+      "config": {
+        "properties": [
+          {
+            "key": "ro.product.first_api_level",
+            "from_partition": "my_manifest",
+            "comment": "Critical for boot"
+          }
+        ]
       }
     }
   ]

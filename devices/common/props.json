@@ -1,20 +1,11 @@
 {
-  "_comment": "ColorOS Property Modification Configuration - Defines rules for build.prop modifications",
-  "version": 1,
-  "strategies": [
+  "_comment": "ColorOS Property Modification Configuration - Function-based design",
+  "version": 2,
+  "rules": [
     {
-      "name": "timezone",
+      "name": "string_replace",
       "enabled": true,
       "priority": 10,
-      "config": {
-        "key": "persist.sys.timezone",
-        "value": "Asia/Shanghai"
-      }
-    },
-    {
-      "name": "global_replacement",
-      "enabled": true,
-      "priority": 20,
       "config": {
         "mappings": [
           {"from": "port_device_code", "to": "base_device_code"},
@@ -27,30 +18,60 @@
       }
     },
     {
-      "name": "display_id",
+      "name": "prop_set",
       "enabled": true,
-      "priority": 30,
+      "priority": 20,
       "config": {
-        "key": "ro.build.display.id",
-        "source": "target_display_id"
+        "properties": [
+          {"key": "persist.sys.timezone", "value": "Asia/Shanghai"},
+          {"key": "ro.oplus.radio.global_regionlock.enabled", "value": "false"},
+          {"key": "persist.sys.radio.global_regionlock.allcheck", "value": "false"},
+          {"key": "ro.oplus.radio.checkservice", "value": "false"},
+          {"key": "ro.build.display.id", "source": "target_display_id"},
+          {"key": "ro.sf.lcd_density", "source": "base_lcd_density", "target": "my_product/build.prop"}
+        ]
       }
     },
     {
-      "name": "region_lock",
+      "name": "prop_copy",
       "enabled": true,
-      "priority": 40,
+      "priority": 25,
       "config": {
         "properties": [
-          {"key": "ro.oplus.radio.global_regionlock.enabled", "value": "false"},
-          {"key": "persist.sys.radio.global_regionlock.allcheck", "value": "false"},
-          {"key": "ro.oplus.radio.checkservice", "value": "false"}
+          {
+            "key": "ro.product.first_api_level",
+            "from_partition": "my_manifest",
+            "comment": "Critical for boot - must match baserom"
+          },
+          {
+            "key": "ro.vendor.oplus.market.name",
+            "from_partition": "my_manifest",
+            "condition": "not_in_manifest"
+          },
+          {
+            "key": "ro.vendor.oplus.market.enname",
+            "from_partition": "my_manifest",
+            "condition": "not_in_manifest"
+          }
+        ]
+      }
+    },
+    {
+      "name": "magic_model",
+      "enabled": true,
+      "priority": 30,
+      "config": {
+        "template": "MODEL:{device_code},BRAND:{product_model}",
+        "properties": [
+          "persist.oplus.prophook.com.oplus.ai.magicstudio",
+          "persist.oplus.prophook.com.oplus.aiunit"
         ]
       }
     },
     {
       "name": "watermark",
       "enabled": true,
-      "priority": 50,
+      "priority": 40,
       "config": {
         "target_key": "ro.build.version.oplusrom.display",
         "template": "{value} | Ported By {author}",
@@ -59,101 +80,11 @@
       }
     },
     {
-      "name": "market_name",
-      "enabled": true,
-      "priority": 60,
-      "config": {
-        "check_manifest": true,
-        "properties": [
-          {"key": "ro.vendor.oplus.market.name", "source": "base_market_name"},
-          {"key": "ro.vendor.oplus.market.enname", "source": "base_market_enname"}
-        ]
-      }
-    },
-    {
-      "name": "magic_model",
-      "enabled": true,
-      "priority": 70,
-      "config": {
-        "properties": [
-          {
-            "key": "persist.oplus.prophook.com.oplus.ai.magicstudio",
-            "template": "MODEL:{device_code},BRAND:{product_model}"
-          },
-          {
-            "key": "persist.oplus.prophook.com.oplus.aiunit",
-            "template": "MODEL:{device_code},BRAND:{product_model}"
-          }
-        ]
-      }
-    },
-    {
-      "name": "lcd_density",
-      "enabled": true,
-      "priority": 80,
-      "config": {
-        "key": "ro.sf.lcd_density",
-        "source": "base_lcd_density",
-        "target_file": "my_product/build.prop"
-      }
-    },
-    {
-      "name": "system_ext_brand",
-      "enabled": true,
-      "priority": 90,
-      "condition": {
-        "port_is_coloros_global": false,
-        "port_android_version_lt": 16
-      },
-      "config": {
-        "file": "system_ext/etc/build.prop",
-        "key": "ro.oplus.image.system_ext.brand",
-        "source": "base_vendor_brand",
-        "transform": "lowercase"
-      }
-    },
-    {
-      "name": "prop_copy",
-      "enabled": true,
-      "priority": 15,
-      "config": {
-        "properties": [
-          {
-            "key": "ro.product.first_api_level",
-            "source_partitions": ["my_manifest"],
-            "target_partitions": ["my_manifest"],
-            "comment": "Critical for boot - must match baserom"
-          }
-        ]
-      }
-    },
-    {
       "name": "fingerprint",
       "enabled": true,
       "priority": 100,
       "config": {
-        "priority_partitions": ["my_manifest", "my_product", "odm", "vendor", "product", "system_ext", "system"],
-        "components": {
-          "brand": {"key": "ro.product.brand", "default": "OnePlus"},
-          "name": {"key": "ro.product.name"},
-          "device": {"key": "ro.product.device", "default": "oplus"},
-          "version": {"key": "ro.build.version.release"},
-          "build_id": {"key": "ro.build.id"},
-          "incremental": {"key": "ro.build.version.incremental"},
-          "type": {"key": "ro.build.type", "default": "user"},
-          "tags": {"key": "ro.build.tags", "default": "release-keys"}
-        },
-        "targets": [
-          "ro.build.fingerprint",
-          "ro.bootimage.build.fingerprint",
-          "ro.system.build.fingerprint",
-          "ro.product.build.fingerprint",
-          "ro.system_ext.build.fingerprint",
-          "ro.vendor.build.fingerprint",
-          "ro.odm.build.fingerprint",
-          "ro.build.description",
-          "ro.system.build.description"
-        ]
+        "priority_partitions": ["my_manifest", "my_product", "odm", "vendor", "product", "system_ext", "system"]
       }
     }
   ],
