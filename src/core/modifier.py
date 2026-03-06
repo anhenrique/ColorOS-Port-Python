@@ -1470,7 +1470,7 @@ class SystemModifier:
 
     def _apply_device_overrides(self):
         base_code = self.ctx.stock_rom_code
-        port_ver = self.ctx.port_android_version
+        port_ver = self.ctx.portrom.android_version
 
         override_src = Path(f"devices/{base_code}/override/{port_ver}").resolve()
 

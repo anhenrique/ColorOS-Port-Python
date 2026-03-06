@@ -1113,7 +1113,7 @@ class Repacker:
         # Format to specified string structure
         timestamp = now.strftime("%Y%m%d%H%M%S")
         output_zip = (
-            self.out_dir / f"{self.ctx.base_vendor_device}-ota_full-{timestamp}.zip"
+            self.out_dir / f"{self.ctx.baserom.vendor_device}-ota_full-{timestamp}.zip"
         )
 
         key_path = self.ota_tools_dir / "key" / "testkey"
