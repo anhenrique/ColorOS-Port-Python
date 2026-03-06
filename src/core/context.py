@@ -34,48 +34,142 @@ class Context:
 
         self.assets = AssetManager(self.config.assets_base_url)
 
-        # ROM properties (will be populated by fetch_rom_info)
-        self.base_android_version = None
-        self.base_android_sdk = None
-        self.base_device_code = None
-        self.base_product_device = None
-        self.base_product_name = None
-        self.base_product_model = None
-        self.base_market_name = None
-        self.base_market_enname = None
-        self.base_regionmark = None
-        self.base_chipset_family = "unknown"
-        self.base_rom_density = "480"
-        self.base_vendor_brand = None
-        self.base_my_product_type = None
-
-        self.port_android_version = None
-        self.port_android_sdk = None
-        self.port_chipset_family = "unknown"
-        self.port_device_code = None
-        self.port_product_device = None
-        self.port_product_name = None
-        self.port_product_model = None
-        self.port_my_product_type = None
-        self.port_market_name = None
-        self.port_vendor_brand = None
-        self.port_area = None
-        self.port_brand = None
-        self.target_display_id = None
-
-        self.port_is_realme_ui = False
-        self.port_is_coloros_global = False
-        self.port_is_oos = False
-        self.port_is_coloros = True
-
         # Configuration properties
         self.enable_ksu = config.enable_ksu
         self.ksu_type = config.ksu_type
         self.disable_vbmeta = config.disable_vbmeta
 
-        self.security_patch = None
-        self.is_ab_device = False
-        self.target_rom_version = "1.0"
+        # Target properties (derived from base/port ROMs)
+        self._target_device_code = None
+        self._target_display_id = None
+        self._target_rom_version = "1.0"
+
+        self.logger = logger
+
+        self.build_dir = self.work_dir
+        self.target_dir = self.build_dir / "target"
+        self.repack_dir = self.build_dir / "repack"
+        self.target_config_dir = self.target_dir / "config"
+        self.repack_images_dir = self.work_dir / "repack_images"
+
+        # Initialize tools
+        self.bin_root = Path("bin").resolve()
+        self.tools = ToolManager(self.bin_root)
+
+        self._init_workspace()
+
+    # === Compatibility properties (delegate to RomPackage) ===
+
+    # Base ROM properties
+    @property
+    def base_android_version(self): return self.baserom.android_version
+    @property
+    def base_android_sdk(self): return self.baserom.android_sdk
+    @property
+    def base_device_code(self): return self.baserom.device_code
+    @property
+    def base_product_device(self): return self.baserom.product_device
+    @property
+    def base_product_name(self): return self.baserom.product_name
+    @property
+    def base_product_model(self): return self.baserom.product_model
+    @property
+    def base_vendor_device(self): return self.baserom.vendor_device
+    @property
+    def base_vendor_model(self): return self.baserom.vendor_model
+    @property
+    def base_vendor_brand(self): return self.baserom.vendor_brand
+    @property
+    def base_chipset_family(self): return self.baserom.chipset_family
+    @property
+    def base_market_name(self): return self.baserom.market_name
+    @property
+    def base_market_enname(self): return self.baserom.market_enname
+    @property
+    def base_regionmark(self): return self.baserom.region_mark
+    @property
+    def base_rom_density(self): return self.baserom.lcd_density
+    @property
+    def base_my_product_type(self): return self.baserom.my_product_type
+
+    # Port ROM properties
+    @property
+    def port_android_version(self): return self.portrom.android_version
+    @property
+    def port_android_sdk(self): return self.portrom.android_sdk
+    @property
+    def port_device_code(self): return self.portrom.device_code
+    @property
+    def port_product_device(self): return self.portrom.product_device
+    @property
+    def port_product_name(self): return self.portrom.product_name
+    @property
+    def port_product_model(self): return self.portrom.product_model
+    @property
+    def port_vendor_device(self): return self.portrom.vendor_device
+    @property
+    def port_vendor_model(self): return self.portrom.vendor_model
+    @property
+    def port_vendor_brand(self): return self.portrom.vendor_brand
+    @property
+    def port_chipset_family(self): return self.portrom.chipset_family
+    @property
+    def port_market_name(self): return self.portrom.market_name
+    @property
+    def port_my_product_type(self): return self.portrom.my_product_type
+    @property
+    def port_area(self): return self.portrom.area
+    @property
+    def port_brand(self): return self.portrom.brand
+    @property
+    def port_oplusrom_version(self): return self.portrom.oplusrom_version
+    @property
+    def port_is_realme_ui(self): return self.portrom.is_realme_ui
+    @property
+    def port_is_coloros_global(self): return self.portrom.is_coloros_global
+    @property
+    def port_is_oos(self): return self.portrom.is_oos
+    @property
+    def port_is_coloros(self): return self.portrom.is_coloros
+
+    # Target properties
+    @property
+    def target_device_code(self):
+        """Target device code (from base ROM)"""
+        return self._target_device_code or self.base_device_code
+
+    @target_device_code.setter
+    def target_device_code(self, value):
+        self._target_device_code = value
+
+    @property
+    def target_display_id(self):
+        """Target display ID (port display with base device code)"""
+        if self._target_display_id is None:
+            port_display = self.portrom.display_id
+            if port_display and self.port_device_code and self.base_device_code:
+                self._target_display_id = port_display.replace(
+                    self.port_device_code, self.base_device_code
+                )
+            else:
+                self._target_display_id = port_display
+        return self._target_display_id
+
+    @property
+    def target_rom_version(self):
+        """Target ROM version (from port OTA display)"""
+        if self._target_rom_version == "1.0":
+            port_ota = self.portrom.display_ota
+            if port_ota:
+                self._target_rom_version = (
+                    port_ota.split("_", 1)[1] if "_" in port_ota else port_ota
+                )
+        return self._target_rom_version
+
+    @property
+    def security_patch(self): return self.portrom.security_patch
+    @property
+    def is_ab_device(self): return self.baserom.is_ab_device
 
         self.logger = logger
 
@@ -92,129 +186,10 @@ class Context:
         self._init_workspace()
 
     def fetch_rom_info(self):
-        """Fetch all ROM properties from baserom and portrom using get_prop (cached)"""
+        """Fetch and log ROM properties (now delegated to RomPackage properties)"""
         self.logger.info("Fetching ROM properties...")
 
-        baserom = self.baserom
-        portrom = self.portrom
-
-        # === Base ROM Properties ===
-        self.base_android_version = baserom.get_prop("ro.build.version.release")
-        self.base_android_sdk = baserom.get_prop("ro.system.build.version.sdk")
-
-        # Product device and model (less reliable, may vary by build)
-        self.base_product_device = baserom.get_prop("ro.product.device")
-        self.base_product_name = baserom.get_prop("ro.product.name")
-        self.base_product_model = baserom.get_prop("ro.product.model")
-
-        # Vendor device is the reliable unique identifier (Google Play supported devices)
-        self.base_vendor_device = baserom.get_prop("ro.product.vendor.device")
-        self.base_vendor_model = baserom.get_prop("ro.product.vendor.model")
-
-        # base_device_code: Use vendor.device as primary identifier for config loading
-        # This is the unique device code used to find devices/target/{code}/ config
-        if self.base_vendor_device:
-            self.base_device_code = (
-                self.base_vendor_device.strip().replace(" ", "").upper()
-            )
-        elif base_device_code := baserom.get_prop("ro.oplus.version.my_manifest"):
-            self.base_device_code = base_device_code.split("_")[0].upper()
-        elif self.base_product_device:
-            self.base_device_code = self.base_product_device.upper()
-        else:
-            self.base_device_code = "UNKNOWN"
-
-        self.base_vendor_brand = baserom.get_prop("ro.product.vendor.brand")
-
-        # Extract Chipset Family (e.g., OPSM8250)
-        self.base_chipset_family = baserom.get_prop("ro.build.device_family")
-        if not self.base_chipset_family:
-            self.base_chipset_family = "unknown"
-
-        self.base_market_name = baserom.get_prop("ro.vendor.oplus.market.name")
-        if not self.base_market_name:
-            self.base_market_name = baserom.get_prop("ro.oplus.market.name")
-
-        self.base_market_enname = baserom.get_prop("ro.vendor.oplus.market.enname")
-        if not self.base_market_enname:
-            self.base_market_enname = baserom.get_prop("ro.oplus.market.enname")
-
-        self.base_regionmark = baserom.get_prop("ro.vendor.oplus.regionmark")
-        if not self.base_regionmark:
-            self.base_regionmark = baserom.get_prop("ro.oplus.regionmark", "CN")
-
-        # LCD Density
-        self.base_rom_density = baserom.get_prop("ro.sf.lcd_density")
-        if not self.base_rom_density:
-            self.base_rom_density = "480"
-
-        # === Port ROM Properties ===
-        self.port_android_version = portrom.get_prop("ro.build.version.release")
-        self.port_android_sdk = portrom.get_prop("ro.system.build.version.sdk")
-
-        self.port_chipset_family = portrom.get_prop("ro.build.device_family")
-
-        # Vendor device is the reliable unique identifier
-        self.port_vendor_device = portrom.get_prop("ro.product.vendor.device")
-        self.port_vendor_model = portrom.get_prop("ro.product.vendor.model")
-
-        # port_device_code: Use vendor.device as primary identifier
-        if self.port_vendor_device:
-            self.port_device_code = (
-                self.port_vendor_device.strip().replace(" ", "").upper()
-            )
-        elif port_device_code := portrom.get_prop("ro.oplus.version.my_manifest"):
-            self.port_device_code = port_device_code.split("_")[0]
-
-        self.port_product_device = portrom.get_prop("ro.product.device")
-        self.port_product_name = portrom.get_prop("ro.product.name")
-        self.port_product_model = portrom.get_prop("ro.product.model")
-
-        self.port_my_product_type = portrom.get_prop("ro.oplus.image.my_product.type")
-
-        # Display ID with replacement
-        target_display_id_orig = portrom.get_prop("ro.build.display.id")
-        if target_display_id_orig and self.port_device_code and self.base_device_code:
-            self.target_display_id = target_display_id_orig.replace(
-                self.port_device_code, self.base_device_code
-            )
-        else:
-            self.target_display_id = target_display_id_orig
-
-        # Vendor brand
-        self.port_vendor_brand = portrom.get_prop("ro.product.vendor.brand")
-
-        # Area and brand
-        self.port_area = portrom.get_prop("ro.oplus.image.system_ext.area")
-        self.port_brand = portrom.get_prop("ro.oplus.image.system_ext.brand")
-        self.port_oplusrom_version = portrom.get_prop("ro.build.version.oplusrom")
-
-        # ROM type detection
-        self.port_is_realme_ui = self.port_brand == "realme"
-        self.port_is_coloros_global = (
-            self.port_area == "gdpr" and self.port_brand != "oneplus"
-        )
-        self.port_is_oos = self.port_area == "gdpr" and self.port_brand == "oneplus"
-        self.port_is_coloros = not (
-            self.port_is_coloros_global or self.port_is_oos or self.port_is_realme_ui
-        )
-
-        # Security patch
-        self.security_patch = portrom.get_prop("ro.build.version.security_patch")
-
-        # AB device
-        is_ab = baserom.get_prop("ro.build.ab_update")
-        self.is_ab_device = is_ab == "true"
-
-        # ROM version
-        port_rom_version = portrom.get_prop("ro.build.display.ota")
-        if port_rom_version:
-            self.target_rom_version = (
-                port_rom_version.split("_", 1)[1]
-                if "_" in port_rom_version
-                else port_rom_version
-            )
-
+        # Access properties to trigger caching and logging
         self.logger.info(
             f"Base: Android {self.base_android_version}, SDK {self.base_android_sdk}, Code {self.base_device_code}"
         )

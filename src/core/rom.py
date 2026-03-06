@@ -957,6 +957,161 @@ class RomPackage:
             self.parse_all_props()
         return self.props.get(key, default)
 
+    # === ROM Properties (moved from Context) ===
+
+    @property
+    def android_version(self) -> str | None:
+        """Android version (e.g., 14, 15)"""
+        return self.get_prop("ro.build.version.release")
+
+    @property
+    def android_sdk(self) -> str | None:
+        """Android SDK version"""
+        return self.get_prop("ro.system.build.version.sdk")
+
+    @property
+    def product_device(self) -> str | None:
+        """Product device name"""
+        return self.get_prop("ro.product.device")
+
+    @property
+    def product_name(self) -> str | None:
+        """Product name"""
+        return self.get_prop("ro.product.name")
+
+    @property
+    def product_model(self) -> str | None:
+        """Product model"""
+        return self.get_prop("ro.product.model")
+
+    @property
+    def vendor_device(self) -> str | None:
+        """Vendor device (reliable unique identifier)"""
+        return self.get_prop("ro.product.vendor.device")
+
+    @property
+    def vendor_model(self) -> str | None:
+        """Vendor model"""
+        return self.get_prop("ro.product.vendor.model")
+
+    @property
+    def vendor_brand(self) -> str | None:
+        """Vendor brand"""
+        return self.get_prop("ro.product.vendor.brand")
+
+    @property
+    def device_code(self) -> str:
+        """
+        Device code for configuration loading.
+        Uses vendor.device as primary identifier.
+        """
+        vendor_dev = self.vendor_device
+        if vendor_dev:
+            return vendor_dev.strip().replace(" ", "").upper()
+
+        # Fallback to my_manifest version
+        manifest_ver = self.get_prop("ro.oplus.version.my_manifest")
+        if manifest_ver:
+            return manifest_ver.split("_")[0].upper()
+
+        # Fallback to product device
+        prod_dev = self.product_device
+        if prod_dev:
+            return prod_dev.upper()
+
+        return "UNKNOWN"
+
+    @property
+    def chipset_family(self) -> str:
+        """Chipset family (e.g., OPSM8250)"""
+        return self.get_prop("ro.build.device_family") or "unknown"
+
+    @property
+    def market_name(self) -> str | None:
+        """Market name"""
+        return self.get_prop("ro.vendor.oplus.market.name") or self.get_prop(
+            "ro.oplus.market.name"
+        )
+
+    @property
+    def market_enname(self) -> str | None:
+        """English market name"""
+        return self.get_prop("ro.vendor.oplus.market.enname") or self.get_prop(
+            "ro.oplus.market.enname"
+        )
+
+    @property
+    def region_mark(self) -> str:
+        """Region mark (default: CN)"""
+        return self.get_prop("ro.vendor.oplus.regionmark") or self.get_prop(
+            "ro.oplus.regionmark", "CN"
+        )
+
+    @property
+    def lcd_density(self) -> str:
+        """LCD density (default: 480)"""
+        return self.get_prop("ro.sf.lcd_density") or "480"
+
+    @property
+    def my_product_type(self) -> str | None:
+        """My product type"""
+        return self.get_prop("ro.oplus.image.my_product.type")
+
+    @property
+    def security_patch(self) -> str | None:
+        """Security patch level"""
+        return self.get_prop("ro.build.version.security_patch")
+
+    @property
+    def display_id(self) -> str | None:
+        """Build display ID"""
+        return self.get_prop("ro.build.display.id")
+
+    @property
+    def display_ota(self) -> str | None:
+        """Build display OTA version"""
+        return self.get_prop("ro.build.display.ota")
+
+    @property
+    def oplusrom_version(self) -> str | None:
+        """OPLUS ROM version"""
+        return self.get_prop("ro.build.version.oplusrom")
+
+    @property
+    def area(self) -> str | None:
+        """System ext area"""
+        return self.get_prop("ro.oplus.image.system_ext.area")
+
+    @property
+    def brand(self) -> str | None:
+        """System ext brand"""
+        return self.get_prop("ro.oplus.image.system_ext.brand")
+
+    @property
+    def is_ab_device(self) -> bool:
+        """Whether this is an A/B device"""
+        return self.get_prop("ro.build.ab_update") == "true"
+
+    @property
+    def is_realme_ui(self) -> bool:
+        """Whether this is Realme UI"""
+        return self.brand == "realme"
+
+    @property
+    def is_coloros_global(self) -> bool:
+        """Whether this is ColorOS Global"""
+        return self.area == "gdpr" and self.brand != "oneplus"
+
+    @property
+    def is_oos(self) -> bool:
+        """Whether this is OxygenOS"""
+        return self.area == "gdpr" and self.brand == "oneplus"
+
+    @property
+    def is_coloros(self) -> bool:
+        """Whether this is ColorOS (China)"""
+        return not (self.is_coloros_global or self.is_oos or self.is_realme_ui)
+
     def scan_apks(self) -> dict:
         """
         Scan all APK files in extracted directory and extract metadata.
