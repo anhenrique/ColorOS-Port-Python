@@ -408,9 +408,8 @@ print(f'条件通过：{evaluator.evaluate(rule, ctx)}')
 | 策略 | 功能 | 说明 |
 |------|------|------|
 | `string_replace` | 全局替换 | 替换设备代码、型号、名称等字符串 |
-| `prop_set` | 属性设置 | 从静态值或上下文设置属性 |
+| `prop_set` | 属性设置 | 从静态值、模板或上下文设置属性 |
 | `prop_copy` | 属性复制 | 从底包复制关键属性 |
-| `magic_model` | AI 模型属性 | 使用模板设置魔法模型属性 |
 | `watermark` | 版本水印 | 添加 "Ported By" 水印 |
 | `fingerprint` | 指纹生成 | 重新生成构建指纹 |
 
@@ -441,7 +440,8 @@ print(f'条件通过：{evaluator.evaluate(rule, ctx)}')
         "properties": [
           {"key": "persist.sys.timezone", "value": "Asia/Shanghai"},
           {"key": "ro.build.display.id", "source": "target_display_id"},
-          {"key": "ro.sf.lcd_density", "source": "base_lcd_density", "target": "my_product/build.prop"}
+          {"key": "ro.sf.lcd_density", "source": "base_lcd_density", "target_partition": "my_product"},
+          {"key": "persist.oplus.prophook.ai.magicstudio", "template": "MODEL:{device_code},BRAND:{product_model}"}
         ]
       }
     },

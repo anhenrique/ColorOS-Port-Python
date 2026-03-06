@@ -409,9 +409,8 @@ The property modification system (`PropertyModifier`) uses a configuration-drive
 | Strategy | Function | Description |
 |----------|----------|-------------|
 | `string_replace` | Global Replacement | Replace device code, model, name strings |
-| `prop_set` | Property Setting | Set properties from static values or context |
+| `prop_set` | Property Setting | Set properties from static values, templates, or context |
 | `prop_copy` | Property Copy | Copy critical properties from baserom |
-| `magic_model` | AI Model Props | Set magic model properties with template |
 | `watermark` | Version Watermark | Add "Ported By" watermark |
 | `fingerprint` | Fingerprint | Regenerate build fingerprint |
 
@@ -442,7 +441,8 @@ Rules are grouped by **function**, not by individual property:
         "properties": [
           {"key": "persist.sys.timezone", "value": "Asia/Shanghai"},
           {"key": "ro.build.display.id", "source": "target_display_id"},
-          {"key": "ro.sf.lcd_density", "source": "base_lcd_density", "target": "my_product/build.prop"}
+          {"key": "ro.sf.lcd_density", "source": "base_lcd_density", "target_partition": "my_product"},
+          {"key": "persist.oplus.prophook.ai.magicstudio", "template": "MODEL:{device_code},BRAND:{product_model}"}
         ]
       }
     },

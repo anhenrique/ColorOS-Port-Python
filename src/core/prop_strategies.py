@@ -137,7 +137,7 @@ class StringReplaceStrategy(PropStrategy):
 class PropSetStrategy(PropStrategy):
     """
     Set property values directly.
-    Supports static values, context sources, and partition-specific targets.
+    Supports static values, context sources, templates, and partition-specific targets.
     """
     
     def apply(self, target_dir: Path) -> bool:
@@ -146,30 +146,51 @@ class PropSetStrategy(PropStrategy):
         for prop in properties:
             key = prop["key"]
             
-            # Get value: static value or from context
-            if "value" in prop:
-                value = prop["value"]
-            elif "source" in prop:
-                value = self._get_context_value(prop["source"])
-            else:
-                continue
-            
+            # Get value: static value, from context, or from template
+            value = self._resolve_value(prop)
             if not value:
                 continue
             
-            # Determine target
-            if "target" in prop:
-                # Specific partition/file
-                target_file = target_dir / prop["target"]
+            # Determine target partition
+            target_partition = prop.get("target_partition")
+            
+            if target_partition:
+                # Specific partition
+                target_file = target_dir / target_partition / "build.prop"
                 if target_file.exists():
                     self._update_or_append(target_file, key, value)
             else:
-                # All build.prop files
-                for prop_file in target_dir.rglob("build.prop"):
-                    if key in prop_file.read_text(encoding="utf-8", errors="ignore"):
-                        self._update_or_append(prop_file, key, value)
+                # Default: my_product/etc/bruce/build.prop
+                bruce_prop = target_dir / "my_product" / "etc" / "bruce" / "build.prop"
+                if bruce_prop.exists() or prop.get("create_if_missing", True):
+                    self._update_or_append(bruce_prop, key, value)
         
         return True
+    
+    def _resolve_value(self, prop: Dict[str, Any]) -> Optional[str]:
+        """Resolve property value from various sources."""
+        # Direct static value
+        if "value" in prop:
+            return prop["value"]
+        
+        # Template with variable substitution
+        if "template" in prop:
+            template = prop["template"]
+            # Collect template variables from context
+            vars = {}
+            if "{device_code}" in template:
+                vars["device_code"] = self.ctx.baserom.device_code or ""
+            if "{product_model}" in template:
+                vars["product_model"] = self.ctx.baserom.product_model or ""
+            if "{vendor_brand}" in template:
+                vars["vendor_brand"] = self.ctx.baserom.vendor_brand or ""
+            return template.format(**vars)
+        
+        # Context source
+        if "source" in prop:
+            return self._get_context_value(prop["source"])
+        
+        return None
     
     def _update_or_append(self, prop_file: Path, key: str, value: str):
         content = prop_file.read_text(encoding="utf-8", errors="ignore")
@@ -254,45 +275,6 @@ class PropCopyStrategy(PropStrategy):
             if content and not content.endswith("\n"):
                 content += "\n"
             content += f"{key}={value}\n"
-        
-        prop_file.write_text(content, encoding="utf-8")
-
-
-class MagicModelStrategy(PropStrategy):
-    """Set AI magic model properties with template."""
-    
-    def apply(self, target_dir: Path) -> bool:
-        cfg = self.config["config"]
-        template = cfg.get("template", "MODEL:{device_code},BRAND:{product_model}")
-        properties = cfg.get("properties", [])
-        
-        device_code = self.ctx.baserom.device_code or ""
-        product_model = self.ctx.baserom.product_model or ""
-        
-        value = template.format(device_code=device_code, product_model=product_model)
-        
-        my_product = target_dir / "my_product"
-        if not my_product.exists():
-            return True
-        
-        bruce_prop = my_product / "etc" / "bruce" / "build.prop"
-        
-        for key in properties:
-            self._update_or_append(bruce_prop, key, value)
-        
-        return True
-    
-    def _update_or_append(self, prop_file: Path, key: str, value: str):
-        if not prop_file.exists():
-            prop_file.parent.mkdir(parents=True, exist_ok=True)
-            prop_file.write_text("", encoding="utf-8")
-        
-        content = prop_file.read_text(encoding="utf-8", errors="ignore")
-        
-        if re.search(rf"^{re.escape(key)}=", content, re.MULTILINE):
-            content = re.sub(rf"^{re.escape(key)}=.*", f"{key}={value}", content, flags=re.MULTILINE)
-        else:
-            content += f"\n{key}={value}\n"
         
         prop_file.write_text(content, encoding="utf-8")
 
@@ -441,7 +423,6 @@ STRATEGY_REGISTRY = {
     "string_replace": StringReplaceStrategy,
     "prop_set": PropSetStrategy,
     "prop_copy": PropCopyStrategy,
-    "magic_model": MagicModelStrategy,
     "watermark": WatermarkStrategy,
     "fingerprint": FingerprintStrategy,
 }

@@ -28,7 +28,9 @@
           {"key": "persist.sys.radio.global_regionlock.allcheck", "value": "false"},
           {"key": "ro.oplus.radio.checkservice", "value": "false"},
           {"key": "ro.build.display.id", "source": "target_display_id"},
-          {"key": "ro.sf.lcd_density", "source": "base_lcd_density", "target": "my_product/build.prop"}
+          {"key": "ro.sf.lcd_density", "source": "base_lcd_density", "target_partition": "my_product"},
+          {"key": "persist.oplus.prophook.com.oplus.ai.magicstudio", "template": "MODEL:{device_code},BRAND:{product_model}"},
+          {"key": "persist.oplus.prophook.com.oplus.aiunit", "template": "MODEL:{device_code},BRAND:{product_model}"}
         ]
       }
     },
@@ -53,18 +55,6 @@
             "from_partition": "my_manifest",
             "condition": "not_in_manifest"
           }
-        ]
-      }
-    },
-    {
-      "name": "magic_model",
-      "enabled": true,
-      "priority": 30,
-      "config": {
-        "template": "MODEL:{device_code},BRAND:{product_model}",
-        "properties": [
-          "persist.oplus.prophook.com.oplus.ai.magicstudio",
-          "persist.oplus.prophook.com.oplus.aiunit"
         ]
       }
     },
