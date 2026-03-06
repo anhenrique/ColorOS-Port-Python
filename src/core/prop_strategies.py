@@ -217,23 +217,24 @@ class PropCopyStrategy(PropStrategy):
         for prop in properties:
             key = prop["key"]
             to_partition = prop.get("to_partition", "my_manifest")
-            condition = prop.get("condition")
+            fallback_key = prop.get("fallback_key")
             
             logger.debug(f"PropCopy: Processing {key}")
             
             # Read from baserom's already parsed props
             value = self._get_baserom_prop(key)
+            
+            # If not found, try fallback key
+            if not value and fallback_key:
+                value = self._get_baserom_prop(fallback_key)
+                if value:
+                    logger.debug(f"PropCopy: Using fallback {fallback_key}={value} for {key}")
+            
             if not value:
                 logger.warning(f"PropCopy: {key} not found in baserom props")
                 continue
             
             logger.debug(f"PropCopy: Found {key}={value} in baserom")
-            
-            # Check condition
-            if condition == "not_in_manifest":
-                if self._prop_exists_in_manifest(key):
-                    logger.debug(f"PropCopy: Skipping {key} (already in manifest)")
-                    continue
             
             # Write to target partition
             target_partition_dir = target_dir / to_partition
@@ -265,18 +266,6 @@ class PropCopyStrategy(PropStrategy):
                 if value:
                     return value
         return None
-    
-    def _prop_exists_in_manifest(self, key: str) -> bool:
-        """Check if property exists in baserom my_manifest."""
-        manifest_prop = self.ctx.baserom.extracted_dir / "my_manifest" / "build.prop"
-        if manifest_prop.exists():
-            return self._read_prop_value(manifest_prop, key) is not None
-        
-        manifest_prop_etc = self.ctx.baserom.extracted_dir / "my_manifest" / "etc" / "build.prop"
-        if manifest_prop_etc.exists():
-            return self._read_prop_value(manifest_prop_etc, key) is not None
-        
-        return False
     
     def _find_build_prop(self, partition_dir: Path) -> Path:
         """Find build.prop in partition directory."""

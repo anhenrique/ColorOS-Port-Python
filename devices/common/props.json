@@ -47,13 +47,12 @@
           },
           {
             "key": "ro.vendor.oplus.market.name",
-            "to_partition": "my_manifest",
-            "condition": "not_in_manifest"
+            "to_partition": "my_manifest"
           },
           {
             "key": "ro.vendor.oplus.market.enname",
             "to_partition": "my_manifest",
-            "condition": "not_in_manifest"
+            "fallback_key": "ro.vendor.oplus.market.name"
           }
         ]
       }
