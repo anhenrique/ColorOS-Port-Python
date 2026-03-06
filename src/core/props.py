@@ -24,6 +24,9 @@ class PropertyModifier:
         # 3. Modify build.prop files
         self._modify_build_props()
 
+        # 4. Regenerate fingerprint
+        self._regenerate_fingerprint()
+
     def _reconstruct_my_product_props(self):
         """
         Reconstructs my_product/build.prop by using baserom as base
@@ -319,3 +322,87 @@ class PropertyModifier:
                 if line and not line.startswith("#") and line.startswith(key + "="):
                     return line.split("=", 1)[1].strip()
         return None
+
+    def _regenerate_fingerprint(self):
+        """
+        Regenerate ro.build.fingerprint and ro.build.description based on modified properties
+        Format: Brand/Name/Device:Release/ID/Incremental:Type/Tags
+        """
+        logger.info("Regenerating build fingerprint...")
+
+        def get_current_prop(key, default=""):
+            # Priority: my_manifest -> my_product -> odm -> vendor -> product -> system_ext -> system
+            # Later loaded props override earlier ones, so search from highest priority to lowest
+            for part in ["my_manifest", "my_product", "odm", "vendor", "product", "system_ext", "system"]:
+                for prop_file in (self.ctx.target_dir / part).rglob("build.prop"):
+                    try:
+                        with open(prop_file, 'r', errors='ignore') as f:
+                            for line in f:
+                                if line.strip().startswith(f"{key}="):
+                                    return line.split("=", 1)[1].strip()
+                    except: pass
+            return default
+
+        # Read components
+        brand = get_current_prop("ro.product.brand", "OnePlus")
+        name = get_current_prop("ro.product.name")
+        device = get_current_prop("ro.product.device", "oplus")
+        version = get_current_prop("ro.build.version.release")
+        build_id = get_current_prop("ro.build.id")
+        incremental = get_current_prop("ro.build.version.incremental")
+        build_type = get_current_prop("ro.build.type", "user")
+        tags = get_current_prop("ro.build.tags", "release-keys")
+
+        logger.debug(f"Fingerprint components: Brand={brand}, Name={name}, Device={device}, Ver={version}, ID={build_id}, Inc={incremental}")
+
+        # Construct Fingerprint
+        new_fingerprint = f"{brand}/{name}/{device}:{version}/{build_id}/{incremental}:{build_type}/{tags}"
+        logger.info(f"New Fingerprint: {new_fingerprint}")
+
+        # Construct Description
+        new_description = f"{name}-{build_type} {version} {build_id} {incremental} {tags}"
+        logger.debug(f"New Description: {new_description}")
+
+        # Write to all build.prop files
+        replacements = {
+            "ro.build.fingerprint=": f"ro.build.fingerprint={new_fingerprint}",
+            "ro.bootimage.build.fingerprint=": f"ro.bootimage.build.fingerprint={new_fingerprint}",
+            "ro.system.build.fingerprint=": f"ro.system.build.fingerprint={new_fingerprint}",
+            "ro.product.build.fingerprint=": f"ro.product.build.fingerprint={new_fingerprint}",
+            "ro.system_ext.build.fingerprint=": f"ro.system_ext.build.fingerprint={new_fingerprint}",
+            "ro.vendor.build.fingerprint=": f"ro.vendor.build.fingerprint={new_fingerprint}",
+            "ro.odm.build.fingerprint=": f"ro.odm.build.fingerprint={new_fingerprint}",
+            
+            "ro.build.description=": f"ro.build.description={new_description}",
+            "ro.system.build.description=": f"ro.system.build.description={new_description}"
+        }
+
+        for prop_file in self.ctx.target_dir.rglob("build.prop"):
+            lines = []
+            try:
+                with open(prop_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    lines = f.readlines()
+            except: continue
+
+            new_lines = []
+            file_changed = False
+            for line in lines:
+                original = line
+                line = line.strip()
+                replaced = False
+                for prefix, new_val in replacements.items():
+                    if line.startswith(prefix):
+                        if original.strip() != new_val:
+                            new_lines.append(new_val + "\n")
+                            file_changed = True
+                        else:
+                            new_lines.append(original)
+                        replaced = True
+                        break
+                if not replaced:
+                    new_lines.append(original)
+            
+            if file_changed:
+                logger.debug(f"Updated fingerprint in {prop_file.relative_to(self.ctx.target_dir)}")
+                with open(prop_file, 'w', encoding='utf-8') as f:
+                    f.writelines(new_lines)
