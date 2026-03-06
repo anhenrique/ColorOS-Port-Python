@@ -454,7 +454,7 @@ Rules are grouped by **function**, not by individual property:
         "properties": [
           {
             "key": "ro.product.first_api_level",
-            "from_partition": "my_manifest",
+            "to_partition": "my_manifest",
             "comment": "Critical for boot"
           }
         ]

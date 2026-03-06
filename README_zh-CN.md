@@ -453,7 +453,7 @@ print(f'条件通过：{evaluator.evaluate(rule, ctx)}')
         "properties": [
           {
             "key": "ro.product.first_api_level",
-            "from_partition": "my_manifest",
+            "to_partition": "my_manifest",
             "comment": "Critical for boot"
           }
         ]
