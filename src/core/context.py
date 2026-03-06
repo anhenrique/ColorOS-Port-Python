@@ -104,10 +104,10 @@ class Context:
 
         # Access properties to trigger caching and logging
         self.logger.info(
-            f"Base: Android {self.base_android_version}, SDK {self.base_android_sdk}, Code {self.base_device_code}"
+            f"Base: Android {self.baserom.android_version}, SDK {self.baserom.android_sdk}, Code {self.baserom.device_code}"
         )
         self.logger.info(
-            f"Port: Android {self.port_android_version}, SDK {self.port_android_sdk}, Code {self.port_device_code}"
+            f"Port: Android {self.portrom.android_version}, SDK {self.portrom.android_sdk}, Code {self.portrom.device_code}"
         )
 
     def get_target_prop_file(self, partition_name: str):
