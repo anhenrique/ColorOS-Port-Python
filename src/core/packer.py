@@ -31,7 +31,7 @@ class Repacker:
         self.fix_timestamp = "1230768000"
         # Define OTA output directory structure
         self.out_dir = Path("out").resolve()
-        self.product_out = self.out_dir / "target" / "product" / self.ctx.stock_rom_code
+        self.product_out = self.out_dir / "target" / "product" / self.ctx.base_vendor_device
         self.images_out = self.product_out / "IMAGES"
         self.meta_out = self.product_out / "META"
         self.ota_tools_dir = Path("otatools").resolve()
@@ -230,11 +230,6 @@ class Repacker:
         # F. Shrink size (resize2fs -M)
         self.shell.run(["resize2fs", "-f", "-M", str(img_output)])
 
-        # G. Calculate remaining space and decide if second pack is needed
-        # mi_ext does not undergo second pack
-        if part_name == "mi_ext":
-            return
-
         # Get Free blocks after resize
         free_blocks = self._get_free_blocks(img_output)
 
@@ -397,20 +392,20 @@ class Repacker:
             base_args.extend(["--group", f"qti_dynamic_partitions:{super_size}"])
             base_args.append("-F")  # Sparse
 
-            # Iterate partitions
-            # List from shell script: odm mi_ext system system_ext product vendor
-            # But we should scan what we have
             partitions = [
-                "odm",
-                "mi_ext",
                 "system",
-                "system_ext",
-                "product",
                 "vendor",
-                "odm_dlkm",
-                "vendor_dlkm",
-                "system_dlkm",
-                "product_dlkm",
+                "product",
+                "system_ext",
+                "odm",
+                "my_product",
+                "my_manifest",
+                "my_stock",
+                "my_region",
+                "my_carrier",
+                "my_heytap",
+                "my_bigball",
+                "my_engineering",
             ]
 
             for part in partitions:
@@ -440,16 +435,21 @@ class Repacker:
             # Scan partitions
             # Use super_list from context if available, or scan standard names
             partitions = [
-                "odm",
-                "mi_ext",
                 "system",
-                "system_ext",
-                "product",
                 "vendor",
-                "odm_dlkm",
-                "vendor_dlkm",
-                "system_dlkm",
-                "product_dlkm",
+                "product",
+                "system_ext",
+                "odm",
+                "my_product",
+                "my_manifest",
+                "my_stock",
+                "my_region",
+                "my_carrier",
+                "my_heytap",
+                "my_bigball",
+                "my_engineering",
+                "my_preload",
+                "my_company",
             ]
 
             for part in partitions:
@@ -513,7 +513,7 @@ class Repacker:
         self.logger.info("Generating hybrid flashing scripts...")
 
         # Prepare output directory
-        out_name = f"{self.ctx.stock_rom_code}_{self.ctx.target_rom_version}_hybrid"
+        out_name = f"{self.ctx.base_vendor_device}_{self.ctx.target_rom_version}_hybrid"
         out_path = self.out_dir / out_name
 
         if out_path.exists():
@@ -592,7 +592,7 @@ class Repacker:
         # 5. Zip the package
         self.logger.info("Zipping hybrid package...")
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        final_zip_name = f"{self.ctx.stock_rom_code}-hybrid-{self.ctx.target_rom_version}-{timestamp}.zip"
+        final_zip_name = f"{self.ctx.base_vendor_device}-hybrid-{self.ctx.target_rom_version}-{timestamp}.zip"
         final_zip_path = self.out_dir / final_zip_name
 
         # Create zip manually to control compression
@@ -617,7 +617,7 @@ class Repacker:
         # So format should be: Part1_Part2_Part3_Part4_MD5_Part6.zip
         # Mapping: Device_Hybrid_Version_SecurityPatch_MD5_Timestamp.zip
 
-        renamed_zip_name = f"{self.ctx.stock_rom_code}_Hybrid_{self.ctx.target_rom_version}_{self.ctx.security_patch}_{md5}_{timestamp}.zip"
+        renamed_zip_name = f"{self.ctx.base_vendor_device}_Hybrid_{self.ctx.target_rom_version}_{self.ctx.security_patch}_{md5}_{timestamp}.zip"
         renamed_zip_path = self.out_dir / renamed_zip_name
         final_zip_path.rename(renamed_zip_path)
 
@@ -631,7 +631,7 @@ class Repacker:
         content = file_path.read_text(encoding="utf-8", errors="ignore")
 
         replacements = {
-            "device_code": self.ctx.stock_rom_code,
+            "device_code": self.ctx.base_vendor_device,
             "baseversion": self.ctx.base_android_version,  # Or full version string?
             "portversion": self.ctx.target_rom_version,
         }
@@ -830,6 +830,8 @@ class Repacker:
             "my_heytap",
             "my_bigball",
             "my_engineering",
+            "my_preload",
+            "my_company",
         ]
 
         map_tool = str(Path("otatools/bin/map_file_generator"))
@@ -859,7 +861,7 @@ class Repacker:
         self.images_out.mkdir(parents=True, exist_ok=True)
         self.meta_out.mkdir(parents=True, exist_ok=True)
 
-        for part in ["SYSTEM", "SYSTEM_EXT", "PRODUCT", "VENDOR", "ODM", "MI_EXT"]:
+        for part in ["SYSTEM", "SYSTEM_EXT", "PRODUCT", "VENDOR", "ODM", "MY_PRODUCT", "MY_MANIFEST", "MY_STOCK", "MY_REGION", "MY_CARRIER", "MY_HEYTAP", "MY_BIGBALL", "MY_ENGINEERING", "MY_PRELOAD", "MY_COMPANY"]:
             (self.product_out / part).mkdir(exist_ok=True)
 
         # For A-only devices, generate map files before collecting images
@@ -882,7 +884,7 @@ class Repacker:
             for img in self.ctx.repack_images_dir.glob("*.img"):
                 shutil.move(str(img), str(self.images_out / img.name))
 
-        device_custom_dir = Path(f"devices/{self.ctx.stock_rom_code}")
+        device_custom_dir = Path(f"devices/target/{self.ctx.base_vendor_device}")
         if device_custom_dir.exists():
             # Handle boot/dtbo replacement
             ksu_boot = list(device_custom_dir.glob("boot*.img"))
@@ -986,11 +988,20 @@ class Repacker:
                 "product",
                 "system_ext",
                 "odm",
-                "mi_ext",
                 "odm_dlkm",
                 "vendor_dlkm",
                 "system_dlkm",
                 "product_dlkm",
+                "my_manifest",
+                "my_product",
+                "my_stock",
+                "my_region",
+                "my_carrier",
+                "my_heytap",
+                "my_bigball",
+                "my_engineering",
+                "my_preload",
+                "my_company",
             ]
         ]
         super_parts_str = " ".join(super_parts)
@@ -1093,7 +1104,7 @@ class Repacker:
         # Format to specified string structure
         timestamp = now.strftime("%Y%m%d%H%M%S")
         output_zip = (
-            self.out_dir / f"{self.ctx.stock_rom_code}-ota_full-{timestamp}.zip"
+            self.out_dir / f"{self.ctx.base_vendor_device}-ota_full-{timestamp}.zip"
         )
 
         key_path = self.ota_tools_dir / "key" / "testkey"
@@ -1117,9 +1128,13 @@ class Repacker:
 
         env["TMPDIR"] = str(custom_tmp_dir)
 
+        # Set OUT environment variable for releasetools.py to locate firmware files
+        env["OUT"] = str(self.product_out)
+        self.logger.info(f"Setting OUT={self.product_out} for releasetools")
+
         cmd = [
             str(self.ota_tools_dir / "bin" / "ota_from_target_files"),
-            # "-v",
+            "-v",
             "-k",
             str(key_path),
             str(self.product_out),
@@ -1134,7 +1149,7 @@ class Repacker:
 
             md5 = hashlib.md5(open(output_zip, "rb").read()).hexdigest()[:10]
 
-            final_name = f"{self.ctx.stock_rom_code}-ota_full-{self.ctx.target_rom_version}-{self.ctx.security_patch}-{timestamp}-{md5}-{self.ctx.port_android_version}.zip"
+            final_name = f"{self.ctx.base_vendor_device}-ota_full-{self.ctx.target_rom_version}-{self.ctx.security_patch}-{timestamp}-{md5}-{self.ctx.port_android_version}.zip"
             final_path = self.out_dir / final_name
             output_zip.rename(final_path)
             self.logger.info(f"Final OTA Package: {final_path}")
@@ -1147,7 +1162,7 @@ class Repacker:
         Get Super partition size
         Logic: Try matching both Device Code and Model
         """
-        device_code = self.ctx.stock_rom_code.upper() if self.ctx.stock_rom_code else ""
+        device_code = self.ctx.base_vendor_device.upper() if self.ctx.base_vendor_device else ""
         product_model = (
             self.ctx.base_product_model.upper() if self.ctx.base_product_model else ""
         )
@@ -1209,7 +1224,7 @@ class Repacker:
         ota_bin = self.product_out / "OTA" / "bin"
         ota_bin.mkdir(parents=True, exist_ok=True)
 
-        updater_src = Path(f"devices/{self.ctx.stock_rom_code}/OTA/bin/updater")
+        updater_src = Path(f"devices/target/{self.ctx.base_vendor_device}/OTA/bin/updater")
         updater_dst = ota_bin / "updater"
 
         if updater_src.exists():
@@ -1241,7 +1256,7 @@ class Repacker:
         recovery_etc = self.product_out / "RECOVERY" / "RAMDISK" / "etc"
         recovery_etc.mkdir(parents=True, exist_ok=True)
 
-        fstab_src = Path(f"devices/{self.ctx.stock_rom_code}/recovery.fstab")
+        fstab_src = Path(f"devices/target/{self.ctx.base_vendor_device}/recovery.fstab")
         fstab_dst = recovery_etc / "recovery.fstab"
 
         if fstab_src.exists():
@@ -1253,7 +1268,7 @@ class Repacker:
                 self.logger.info("Copied default recovery.fstab")
 
         # 4. Copy releasetools.py
-        releasetools_src = Path(f"devices/{self.ctx.stock_rom_code}/releasetools.py")
+        releasetools_src = Path(f"devices/target/{self.ctx.base_vendor_device}/releasetools.py")
         releasetools_dst = self.meta_out / "releasetools.py"
 
         if releasetools_src.exists():
@@ -1271,7 +1286,7 @@ class Repacker:
         """
         Handle firmware-update directory for A-only devices.
         Port.sh logic:
-        1. If build/baserom/firmware-update exists, copy it
+        1. If build/baserom/images/firmware-update exists, copy it
         2. Otherwise, find .elf/.mdn/.bin files and move to firmware-update
         3. Copy boot.img, dtbo.img, vbmeta.img to appropriate locations
         4. Handle storage-fw and ffu_tool
@@ -1288,7 +1303,7 @@ class Repacker:
 
         if baserom_work_dir and baserom_work_dir.exists():
             # 1. Check for firmware-update directory
-            baserom_fw = baserom_work_dir / "firmware-update"
+            baserom_fw = baserom_work_dir / "images" / "firmware-update"
             if baserom_fw.exists() and baserom_fw.is_dir():
                 shutil.copytree(baserom_fw, firmware_out, dirs_exist_ok=True)
                 self.logger.info(f"Copied firmware-update from {baserom_fw}")
@@ -1315,17 +1330,21 @@ class Repacker:
                         self.logger.info(f"Copied {img_name} to firmware-update")
 
             # 3. Handle storage-fw and ffu_tool
-            storage_fw = baserom_work_dir / "storage-fw"
+            storage_fw = baserom_work_dir / "images" / "storage-fw"
             if storage_fw.exists():
                 storage_out = self.product_out / "storage-fw"
+                storage_out.mkdir(parents=True, exist_ok=True)
                 shutil.copytree(storage_fw, storage_out, dirs_exist_ok=True)
 
-                ffu_tool = baserom_work_dir / "ffu_tool"
+                ffu_tool = baserom_work_dir / "images" / "ffu_tool"
                 if ffu_tool.exists():
                     shutil.copy2(ffu_tool, storage_out / "ffu_tool")
                     self.logger.info("Copied ffu_tool to storage-fw")
             else:
-                ffu_tool = baserom_work_dir / "ffu_tool"
+                # Check if ffu_tool exists at root level
+                ffu_tool = baserom_work_dir / "images" / "ffu_tool"
                 if ffu_tool.exists():
-                    shutil.copy2(ffu_tool, self.product_out / "ffu_tool")
-                    self.logger.info("Copied ffu_tool")
+                    storage_out = self.product_out / "storage-fw"
+                    storage_out.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(ffu_tool, storage_out / "ffu_tool")
+                    self.logger.info("Copied ffu_tool to storage-fw")
