@@ -882,9 +882,6 @@ class Repacker:
         self.logger.info("Collecting firmware images...")
         if self.ctx.repack_images_dir.exists():
             for img in self.ctx.repack_images_dir.glob("*.img"):
-                # Skip boot.img for A-only devices (should be in root directory)
-                if img.name == "boot.img" and not getattr(self.ctx, "is_ab_device", False):
-                    continue
                 shutil.move(str(img), str(self.images_out / img.name))
 
         device_custom_dir = Path(f"devices/target/{self.ctx.base_vendor_device}")
@@ -1332,11 +1329,12 @@ class Repacker:
                         shutil.copy2(src, firmware_out / img_name)
                         self.logger.info(f"Copied {img_name} to firmware-update")
 
-                # Copy boot.img to root directory for A-only OTA
+                # Copy boot.img to IMAGES directory for A-only OTA
                 boot_img = baserom_images / "boot.img"
                 if boot_img.exists():
-                    shutil.copy2(boot_img, self.product_out / "boot.img")
-                    self.logger.info("Copied boot.img to root")
+                    self.images_out.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(boot_img, self.images_out / "boot.img")
+                    self.logger.info("Copied boot.img to IMAGES")
 
             # 3. Handle storage-fw and ffu_tool
             storage_fw = baserom_work_dir / "images" / "storage-fw"
