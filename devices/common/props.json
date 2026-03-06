@@ -1,0 +1,154 @@
+{
+  "_comment": "ColorOS Property Modification Configuration - Defines rules for build.prop modifications",
+  "version": 1,
+  "strategies": [
+    {
+      "name": "timezone",
+      "enabled": true,
+      "priority": 10,
+      "config": {
+        "key": "persist.sys.timezone",
+        "value": "Asia/Shanghai"
+      }
+    },
+    {
+      "name": "global_replacement",
+      "enabled": true,
+      "priority": 20,
+      "config": {
+        "mappings": [
+          {"from": "port_device_code", "to": "base_device_code"},
+          {"from": "port_product_model", "to": "base_product_model"},
+          {"from": "port_product_name", "to": "base_product_name"},
+          {"from": "port_product_device", "to": "base_product_device"},
+          {"from": "port_vendor_device", "to": "base_vendor_device"},
+          {"from": "port_vendor_model", "to": "base_vendor_model"}
+        ]
+      }
+    },
+    {
+      "name": "display_id",
+      "enabled": true,
+      "priority": 30,
+      "config": {
+        "key": "ro.build.display.id",
+        "source": "target_display_id"
+      }
+    },
+    {
+      "name": "region_lock",
+      "enabled": true,
+      "priority": 40,
+      "config": {
+        "properties": [
+          {"key": "ro.oplus.radio.global_regionlock.enabled", "value": "false"},
+          {"key": "persist.sys.radio.global_regionlock.allcheck", "value": "false"},
+          {"key": "ro.oplus.radio.checkservice", "value": "false"}
+        ]
+      }
+    },
+    {
+      "name": "watermark",
+      "enabled": true,
+      "priority": 50,
+      "config": {
+        "target_key": "ro.build.version.oplusrom.display",
+        "template": "{value} | Ported By {author}",
+        "author": "BT",
+        "skip_if_contains": "Ported By"
+      }
+    },
+    {
+      "name": "market_name",
+      "enabled": true,
+      "priority": 60,
+      "config": {
+        "check_manifest": true,
+        "properties": [
+          {"key": "ro.vendor.oplus.market.name", "source": "base_market_name"},
+          {"key": "ro.vendor.oplus.market.enname", "source": "base_market_enname"}
+        ]
+      }
+    },
+    {
+      "name": "magic_model",
+      "enabled": true,
+      "priority": 70,
+      "config": {
+        "properties": [
+          {
+            "key": "persist.oplus.prophook.com.oplus.ai.magicstudio",
+            "template": "MODEL:{device_code},BRAND:{product_model}"
+          },
+          {
+            "key": "persist.oplus.prophook.com.oplus.aiunit",
+            "template": "MODEL:{device_code},BRAND:{product_model}"
+          }
+        ]
+      }
+    },
+    {
+      "name": "lcd_density",
+      "enabled": true,
+      "priority": 80,
+      "config": {
+        "key": "ro.sf.lcd_density",
+        "source": "base_lcd_density",
+        "target_file": "my_product/build.prop"
+      }
+    },
+    {
+      "name": "system_ext_brand",
+      "enabled": true,
+      "priority": 90,
+      "condition": {
+        "port_is_coloros_global": false,
+        "port_android_version_lt": 16
+      },
+      "config": {
+        "file": "system_ext/etc/build.prop",
+        "key": "ro.oplus.image.system_ext.brand",
+        "source": "base_vendor_brand",
+        "transform": "lowercase"
+      }
+    },
+    {
+      "name": "fingerprint",
+      "enabled": true,
+      "priority": 100,
+      "config": {
+        "priority_partitions": ["my_manifest", "my_product", "odm", "vendor", "product", "system_ext", "system"],
+        "components": {
+          "brand": {"key": "ro.product.brand", "default": "OnePlus"},
+          "name": {"key": "ro.product.name"},
+          "device": {"key": "ro.product.device", "default": "oplus"},
+          "version": {"key": "ro.build.version.release"},
+          "build_id": {"key": "ro.build.id"},
+          "incremental": {"key": "ro.build.version.incremental"},
+          "type": {"key": "ro.build.type", "default": "user"},
+          "tags": {"key": "ro.build.tags", "default": "release-keys"}
+        },
+        "targets": [
+          "ro.build.fingerprint",
+          "ro.bootimage.build.fingerprint",
+          "ro.system.build.fingerprint",
+          "ro.product.build.fingerprint",
+          "ro.system_ext.build.fingerprint",
+          "ro.vendor.build.fingerprint",
+          "ro.odm.build.fingerprint",
+          "ro.build.description",
+          "ro.system.build.description"
+        ]
+      }
+    }
+  ],
+  "my_product": {
+    "force_keys": [
+      "ro.build.version.oplusrom",
+      "ro.build.version.oplusrom.display",
+      "ro.build.version.oplusrom.confidential",
+      "ro.build.version.realmeui"
+    ],
+    "import_line": "import /mnt/vendor/my_product/etc/bruce/build.prop"
+  }
+}
