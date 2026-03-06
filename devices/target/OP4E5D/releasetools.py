@@ -50,10 +50,18 @@ def FullOTA_InstallBegin(self):
   self.output_zip.write(os.path.join(TARGET_DIR, "firmware-update/dpAP.img"), "firmware-update/dpAP.img")
   self.output_zip.write(os.path.join(TARGET_DIR, "firmware-update/xbl_ddr5.img"), "firmware-update/xbl_ddr5.img")
   self.output_zip.write(os.path.join(TARGET_DIR, "firmware-update/xbl_ddr4.img"), "firmware-update/xbl_ddr4.img")
-  self.output_zip.write(os.path.join(TARGET_DIR, "storage-fw/ffu_tool"), "ffu_tool")
-  self.output_zip.write(os.path.join(TARGET_DIR, "storage-fw/SS_KLUEG8UHDB-C2D1_1900.fw"), "storage-fw/SS_KLUEG8UHDB-C2D1_1900.fw")
-  self.output_zip.write(os.path.join(TARGET_DIR, "storage-fw/SS_KLUFG8RHDA-B2D1_0900.fw"), "storage-fw/SS_KLUFG8RHDA-B2D1_0900.fw")
-  self.output_zip.write(os.path.join(TARGET_DIR, "storage-fw/SS_KLUDG4UHDB-B2D1_1900.fw"), "storage-fw/SS_KLUDG4UHDB-B2D1_1900.fw")  
+
+  # Handle storage-fw (optional, may not exist for all devices)
+  storage_fw_dir = os.path.join(TARGET_DIR, "storage-fw")
+  if os.path.isdir(storage_fw_dir):
+    ffu_tool_path = os.path.join(storage_fw_dir, "ffu_tool")
+    if os.path.exists(ffu_tool_path):
+      self.output_zip.write(ffu_tool_path, "ffu_tool")
+
+    for fw_file in ["SS_KLUEG8UHDB-C2D1_1900.fw", "SS_KLUFG8RHDA-B2D1_0900.fw", "SS_KLUDG4UHDB-B2D1_1900.fw"]:
+      fw_path = os.path.join(storage_fw_dir, fw_file)
+      if os.path.exists(fw_path):
+        self.output_zip.write(fw_path, f"storage-fw/{fw_file}")  
 # Write Firmware updater-script
   self.script.AppendExtra('')
   self.script.AppendExtra('# ---- radio update tasks ----')
@@ -80,13 +88,19 @@ def FullOTA_InstallBegin(self):
   self.script.AppendExtra('package_extract_file("firmware-update/aop.img", "/dev/block/bootdevice/by-name/aop");')
   self.script.AppendExtra('package_extract_file("firmware-update/dpAP.img", "/dev/block/bootdevice/by-name/apdp");')
   self.script.AppendExtra('ifelse(get_xblddr_type() == "ddr5",package_extract_file("firmware-update/xbl_ddr5.img", "/dev/block/bootdevice/by-name/xbl");ui_print("update ddr5 xbl!"),package_extract_file("firmware-update/xbl_ddr4.img", "/dev/block/bootdevice/by-name/xbl"));')
-  self.script.AppendExtra('package_extract_file("storage-fw/SS_KLUEG8UHDB-C2D1_1900.fw", "/tmp/firmware/SS_KLUEG8UHDB-C2D1_1900.fw");')
-  self.script.AppendExtra('set_metadata("/tmp/firmware/SS_KLUEG8UHDB-C2D1_1900.fw", "uid", 0, "gid", 2000, "mode", 0666);')
-  self.script.AppendExtra('package_extract_file("storage-fw/SS_KLUFG8RHDA-B2D1_0900.fw", "/tmp/firmware/SS_KLUFG8RHDA-B2D1_0900.fw");')
-  self.script.AppendExtra('set_metadata("/tmp/firmware/SS_KLUFG8RHDA-B2D1_0900.fw", "uid", 0, "gid", 2000, "mode", 0666);')
-  self.script.AppendExtra('package_extract_file("storage-fw/SS_KLUDG4UHDB-B2D1_1900.fw", "/tmp/firmware/SS_KLUDG4UHDB-B2D1_1900.fw");')
-  self.script.AppendExtra('set_metadata("/tmp/firmware/SS_KLUDG4UHDB-B2D1_1900.fw", "uid", 0, "gid", 2000, "mode", 0666);')
-  self.script.AppendExtra('package_extract_file("ffu_tool", "/tmp/ffu_tool");set_metadata("/tmp/ffu_tool", "uid", 0, "gid", 2000, "mode", 0755, "capabilities", 0x0, "selabel", "u:object_r:bootanim_exec:s0");')
+
+  # Handle storage-fw scripts (optional)
+  storage_fw_dir = os.path.join(TARGET_DIR, "storage-fw")
+  if os.path.isdir(storage_fw_dir):
+    for fw_file in ["SS_KLUEG8UHDB-C2D1_1900.fw", "SS_KLUFG8RHDA-B2D1_0900.fw", "SS_KLUDG4UHDB-B2D1_1900.fw"]:
+      fw_path = os.path.join(storage_fw_dir, fw_file)
+      if os.path.exists(fw_path):
+        self.script.AppendExtra(f'package_extract_file("storage-fw/{fw_file}", "/tmp/firmware/{fw_file}");')
+        self.script.AppendExtra(f'set_metadata("/tmp/firmware/{fw_file}", "uid", 0, "gid", 2000, "mode", 0666);')
+
+    ffu_tool_path = os.path.join(storage_fw_dir, "ffu_tool")
+    if os.path.exists(ffu_tool_path):
+      self.script.AppendExtra('package_extract_file("ffu_tool", "/tmp/ffu_tool");set_metadata("/tmp/ffu_tool", "uid", 0, "gid", 2000, "mode", 0755, "capabilities", 0x0, "selabel", "u:object_r:bootanim_exec:s0");')
 # Firmware - sagit
 def FullOTA_InstallEnd(self):
   self.output_zip.write(os.path.join(TARGET_DIR, "firmware-update/dtbo.img"), "firmware-update/dtbo.img")
