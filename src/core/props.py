@@ -80,7 +80,8 @@ class PropertyModifier:
     
     def _build_strategies(self):
         """Build and sort strategy instances from config."""
-        strategy_configs = self._config.get("strategies", [])
+        # Support both "strategies" (v1) and "rules" (v2) naming
+        strategy_configs = self._config.get("rules", self._config.get("strategies", []))
         
         for config in strategy_configs:
             if not config.get("enabled", True):
