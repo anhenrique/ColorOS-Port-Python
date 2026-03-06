@@ -539,3 +539,97 @@ def create_strategy(config: Dict[str, Any], context: Any) -> Optional[PropStrate
         return None
     
     return strategy_class(config, context)
+
+
+class PropCopyStrategy(PropStrategy):
+    """
+    Generic strategy for copying properties from source to target files.
+    Supports reading from baserom partitions and writing to multiple target partitions.
+    """
+    
+    def apply(self, target_dir: Path) -> bool:
+        cfg = self.config["config"]
+        props = cfg.get("properties", [])
+        
+        for prop_config in props:
+            key = prop_config["key"]
+            source_partitions = prop_config.get("source_partitions", ["my_manifest"])
+            target_partitions = prop_config.get("target_partitions", ["vendor", "product", "system"])
+            default_value = prop_config.get("default")
+            
+            # Read value from baserom source partitions
+            value = self._read_from_baserom(source_partitions, key)
+            
+            if not value and default_value:
+                value = default_value
+            
+            if not value:
+                logger.warning(f"PropCopyStrategy: Could not find {key} in baserom")
+                continue
+            
+            # Write to target partitions
+            written = 0
+            for part in target_partitions:
+                part_dir = target_dir / part
+                if not part_dir.exists():
+                    continue
+                
+                for prop_file in part_dir.rglob("build.prop"):
+                    if self._update_or_append_prop(prop_file, key, value):
+                        written += 1
+                        logger.debug(f"PropCopyStrategy: Set {key}={value} in {prop_file}")
+            
+            if written > 0:
+                logger.info(f"PropCopyStrategy: Copied {key}={value} to {written} file(s)")
+        
+        return True
+    
+    def _read_from_baserom(self, partitions: List[str], key: str) -> Optional[str]:
+        """Read property value from baserom partitions."""
+        for part in partitions:
+            part_dir = self.ctx.baserom.extracted_dir / part
+            if not part_dir.exists():
+                continue
+            
+            for prop_file in part_dir.rglob("build.prop"):
+                value = self._read_prop_value(prop_file, key)
+                if value:
+                    return value
+        return None
+    
+    def _read_prop_value(self, file_path: Path, key: str) -> Optional[str]:
+        """Read a single property value from file."""
+        if not file_path.exists():
+            return None
+        try:
+            with open(file_path, "r", errors="ignore") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and line.startswith(f"{key}="):
+                        return line.split("=", 1)[1].strip()
+        except:
+            pass
+        return None
+    
+    def _update_or_append_prop(self, prop_file: Path, key: str, value: str) -> bool:
+        """Update existing property or append new one."""
+        if not prop_file.exists():
+            return False
+        
+        content = prop_file.read_text(encoding="utf-8", errors="ignore")
+        
+        if re.search(rf"^{re.escape(key)}=", content, re.MULTILINE):
+            # Update existing
+            content = re.sub(rf"^{re.escape(key)}=.*", f"{key}={value}", content, flags=re.MULTILINE)
+        else:
+            # Append new
+            if content and not content.endswith("\n"):
+                content += "\n"
+            content += f"{key}={value}\n"
+        
+        prop_file.write_text(content, encoding="utf-8")
+        return True
+
+
+# Register the new strategy
+STRATEGY_REGISTRY["prop_copy"] = PropCopyStrategy

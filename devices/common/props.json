@@ -113,6 +113,21 @@
       }
     },
     {
+      "name": "prop_copy",
+      "enabled": true,
+      "priority": 15,
+      "config": {
+        "properties": [
+          {
+            "key": "ro.product.first_api_level",
+            "source_partitions": ["my_manifest"],
+            "target_partitions": ["vendor", "product", "system"],
+            "comment": "Critical for boot - must match baserom"
+          }
+        ]
+      }
+    },
+    {
       "name": "fingerprint",
       "enabled": true,
       "priority": 100,
