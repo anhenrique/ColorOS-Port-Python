@@ -383,6 +383,158 @@ print(f'条件通过：{evaluator.evaluate(rule, ctx)}')
 
 ---
 
+## 🔧 配置驱动的属性修改
+
+属性修改系统 (`PropertyModifier`) 使用配置驱动的架构和可插拔策略。你可以在 `devices/common/props.json` 中定义规则，而不是在 Python 代码中硬编码修改逻辑。
+
+### 架构概览
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    属性修改系统                               │
+├─────────────────────────────────────────────────────────────┤
+│  配置文件 (props.json)                                        │
+│       ↓                                                       │
+│  策略注册表                                                    │
+│       ↓                                                       │
+│  基于优先级的执行                                               │
+│       ↓                                                       │
+│  目标 build.prop 文件                                          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 内置策略
+
+| 策略 | 说明 | 优先级 |
+|------|------|--------|
+| `timezone` | 设置时区为 Asia/Shanghai | 10 |
+| `global_replacement` | 替换设备代码、型号、名称 | 20 |
+| `display_id` | 更新 ro.build.display.id | 30 |
+| `region_lock` | 禁用区域锁属性 | 40 |
+| `watermark` | 添加 "Ported By" 水印 | 50 |
+| `market_name` | 从底包设置市场名称 | 60 |
+| `magic_model` | 设置 AI 魔法模型属性 | 70 |
+| `lcd_density` | 从底包设置 LCD 密度 | 80 |
+| `system_ext_brand` | 更新 system_ext 品牌 | 90 |
+| `fingerprint` | 重新生成构建指纹 | 100 |
+
+### 配置格式
+
+```json
+{
+  "version": 1,
+  "strategies": [
+    {
+      "name": "strategy_name",
+      "enabled": true,
+      "priority": 50,
+      "condition": {
+        "port_android_version_lt": 16
+      },
+      "config": {
+        // 策略特定的配置
+      }
+    }
+  ]
+}
+```
+
+### 条件
+
+策略支持使用比较运算符进行条件执行：
+
+| 运算符 | 后缀 | 示例 |
+|--------|------|------|
+| 小于 | `_lt` | `"port_android_version_lt": 16` |
+| 小于等于 | `_lte` | `"base_android_version_lte": 14` |
+| 大于 | `_gt` | `"port_android_version_gt": 14` |
+| 大于等于 | `_gte` | `"base_android_version_gte": 13` |
+| 不等于 | `_ne` | `"region_ne": "CN"` |
+
+### 上下文变量
+
+在配置映射和模板中可用：
+
+**移植包 ROM 属性：**
+- `port_device_code`, `port_product_model`, `port_product_name`
+- `port_product_device`, `port_vendor_device`, `port_vendor_model`
+- `port_vendor_brand`, `port_android_version`, `port_is_coloros_global`
+
+**底包 ROM 属性：**
+- `base_device_code`, `base_product_model`, `base_product_name`
+- `base_product_device`, `base_vendor_device`, `base_vendor_model`
+- `base_vendor_brand`, `base_market_name`, `base_market_enname`
+- `base_lcd_density`
+
+**目标属性：**
+- `target_display_id`
+
+### 自定义策略示例
+
+通过实现 `PropStrategy` 类创建自定义策略：
+
+```python
+from src.core.prop_strategies import PropStrategy, STRATEGY_REGISTRY
+
+class MyCustomStrategy(PropStrategy):
+    def apply(self, target_dir: Path) -> bool:
+        # 你的修改逻辑在这里
+        key = self.config["config"]["key"]
+        value = self._get_context_value("base_device_code")
+        # ... 修改 build.prop 文件
+        return True
+    
+    def check_condition(self) -> bool:
+        # 可选：自定义条件逻辑
+        return super().check_condition()
+
+# 注册策略
+STRATEGY_REGISTRY["my_custom"] = MyCustomStrategy
+```
+
+然后在 `props.json` 中使用它：
+
+```json
+{
+  "strategies": [
+    {
+      "name": "my_custom",
+      "enabled": true,
+      "priority": 75,
+      "config": {
+        "key": "ro.custom.property",
+        "value": "custom_value"
+      }
+    }
+  ]
+}
+```
+
+### 分层配置
+
+与其他配置文件一样，`props.json` 遵循三层继承：
+
+1. **通用层** (`devices/common/props.json`): 所有设备的默认策略
+2. **芯片组层** (`devices/chipset/<FAMILY>/props.json`): 芯片组特定覆盖
+3. **目标层** (`devices/target/<DEVICE>/props.json`): 设备特定覆盖
+
+设备特定覆盖示例：
+
+```json
+{
+  "strategies": [
+    {
+      "name": "watermark",
+      "config": {
+        "template": "{value} | Ported by YourName"
+      }
+    }
+  ]
+}
+```
+
+---
+
 ## ⚠️ 免责声明
 
 本项目中包含的二进制工具仅适用于 **Linux x86_64** 架构。作者对你的设备可能发生的任何损坏概不负责。

@@ -384,6 +384,158 @@ The framework generates detailed reports during config loading:
 
 ---
 
+## 🔧 Configuration-Driven Property Modification
+
+The property modification system (`PropertyModifier`) uses a configuration-driven architecture with pluggable strategies. Instead of hardcoding modification logic in Python, you define rules in `devices/common/props.json`.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Property Modification System                    │
+├─────────────────────────────────────────────────────────────┤
+│  Configuration File (props.json)                             │
+│       ↓                                                      │
+│  Strategy Registry                                           │
+│       ↓                                                      │
+│  Priority-based Execution                                    │
+│       ↓                                                      │
+│  Target build.prop Files                                     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Built-in Strategies
+
+| Strategy | Description | Priority |
+|----------|-------------|----------|
+| `timezone` | Set timezone to Asia/Shanghai | 10 |
+| `global_replacement` | Replace device codes, models, names | 20 |
+| `display_id` | Update ro.build.display.id | 30 |
+| `region_lock` | Disable region lock properties | 40 |
+| `watermark` | Add "Ported By" watermark | 50 |
+| `market_name` | Set market names from base ROM | 60 |
+| `magic_model` | Set AI magic model properties | 70 |
+| `lcd_density` | Set LCD density from base | 80 |
+| `system_ext_brand` | Update system_ext brand | 90 |
+| `fingerprint` | Regenerate build fingerprint | 100 |
+
+### Configuration Format
+
+```json
+{
+  "version": 1,
+  "strategies": [
+    {
+      "name": "strategy_name",
+      "enabled": true,
+      "priority": 50,
+      "condition": {
+        "port_android_version_lt": 16
+      },
+      "config": {
+        // Strategy-specific configuration
+      }
+    }
+  ]
+}
+```
+
+### Conditions
+
+Strategies support conditional execution using comparison operators:
+
+| Operator | Suffix | Example |
+|----------|--------|---------|
+| Less Than | `_lt` | `"port_android_version_lt": 16` |
+| Less Than or Equal | `_lte` | `"base_android_version_lte": 14` |
+| Greater Than | `_gt` | `"port_android_version_gt": 14` |
+| Greater Than or Equal | `_gte` | `"base_android_version_gte": 13` |
+| Not Equal | `_ne` | `"region_ne": "CN"` |
+
+### Context Variables
+
+Available in configuration mappings and templates:
+
+**Port ROM Properties:**
+- `port_device_code`, `port_product_model`, `port_product_name`
+- `port_product_device`, `port_vendor_device`, `port_vendor_model`
+- `port_vendor_brand`, `port_android_version`, `port_is_coloros_global`
+
+**Base ROM Properties:**
+- `base_device_code`, `base_product_model`, `base_product_name`
+- `base_product_device`, `base_vendor_device`, `base_vendor_model`
+- `base_vendor_brand`, `base_market_name`, `base_market_enname`
+- `base_lcd_density`
+
+**Target Properties:**
+- `target_display_id`
+
+### Custom Strategy Example
+
+Create a custom strategy by implementing the `PropStrategy` class:
+
+```python
+from src.core.prop_strategies import PropStrategy, STRATEGY_REGISTRY
+
+class MyCustomStrategy(PropStrategy):
+    def apply(self, target_dir: Path) -> bool:
+        # Your modification logic here
+        key = self.config["config"]["key"]
+        value = self._get_context_value("base_device_code")
+        # ... modify build.prop files
+        return True
+    
+    def check_condition(self) -> bool:
+        # Optional: custom condition logic
+        return super().check_condition()
+
+# Register the strategy
+STRATEGY_REGISTRY["my_custom"] = MyCustomStrategy
+```
+
+Then use it in `props.json`:
+
+```json
+{
+  "strategies": [
+    {
+      "name": "my_custom",
+      "enabled": true,
+      "priority": 75,
+      "config": {
+        "key": "ro.custom.property",
+        "value": "custom_value"
+      }
+    }
+  ]
+}
+```
+
+### Hierarchical Configuration
+
+Like other config files, `props.json` follows the three-layer inheritance:
+
+1. **Common** (`devices/common/props.json`): Default strategies for all devices
+2. **Chipset** (`devices/chipset/<FAMILY>/props.json`): Chipset-specific overrides
+3. **Target** (`devices/target/<DEVICE>/props.json`): Device-specific overrides
+
+Example device-specific override:
+
+```json
+{
+  "strategies": [
+    {
+      "name": "watermark",
+      "config": {
+        "template": "{value} | Ported by YourName"
+      }
+    }
+  ]
+}
+```
+
+---
+
 ## ⚠️ Disclaimer
 
 The binary tools included in this project are for the **Linux x86_64** architecture only. The author is not responsible for any damage to your device.
