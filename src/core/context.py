@@ -98,20 +98,6 @@ class Context:
     @property
     def is_ab_device(self): return self.baserom.is_ab_device
 
-        self.logger = logger
-
-        self.build_dir = self.work_dir
-        self.target_dir = self.build_dir / "target"
-        self.repack_dir = self.build_dir / "repack"
-        self.target_config_dir = self.target_dir / "config"
-        self.repack_images_dir = self.work_dir / "repack_images"
-
-        # Initialize tools
-        self.bin_root = Path("bin").resolve()
-        self.tools = ToolManager(self.bin_root)
-
-        self._init_workspace()
-
     def fetch_rom_info(self):
         """Fetch and log ROM properties (now delegated to RomPackage properties)"""
         self.logger.info("Fetching ROM properties...")
