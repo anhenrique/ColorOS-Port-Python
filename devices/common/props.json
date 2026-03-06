@@ -42,17 +42,17 @@
         "properties": [
           {
             "key": "ro.product.first_api_level",
-            "from_partition": "my_manifest",
+            "to_partition": "my_manifest",
             "comment": "Critical for boot - must match baserom"
           },
           {
             "key": "ro.vendor.oplus.market.name",
-            "from_partition": "my_manifest",
+            "to_partition": "my_manifest",
             "condition": "not_in_manifest"
           },
           {
             "key": "ro.vendor.oplus.market.enname",
-            "from_partition": "my_manifest",
+            "to_partition": "my_manifest",
             "condition": "not_in_manifest"
           }
         ]
