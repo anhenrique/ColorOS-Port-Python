@@ -1339,11 +1339,16 @@ class Repacker:
                         self.logger.info(f"Copied {img_name} to firmware-update")
 
                 # Copy boot.img to IMAGES directory for A-only OTA
-                boot_img = baserom_images / "boot.img"
-                if boot_img.exists():
-                    self.images_out.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(boot_img, self.images_out / "boot.img")
-                    self.logger.info("Copied boot.img to IMAGES")
+                # Skip if boot.img already exists (e.g., patched by AnyKernel)
+                target_boot_img = self.images_out / "boot.img"
+                if target_boot_img.exists():
+                    self.logger.info("boot.img already exists in IMAGES (possibly patched), skipping")
+                else:
+                    boot_img = baserom_images / "boot.img"
+                    if boot_img.exists():
+                        self.images_out.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(boot_img, target_boot_img)
+                        self.logger.info("Copied boot.img to IMAGES")
 
             # 3. Handle storage-fw and ffu_tool
             storage_fw = baserom_work_dir / "images" / "storage-fw"
