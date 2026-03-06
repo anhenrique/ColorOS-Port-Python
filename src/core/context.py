@@ -127,7 +127,12 @@ class Context:
         # if self.build_dir.exists():
         #     shutil.rmtree(self.build_dir)
         self.build_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Clean target_dir to avoid interference from previous builds
+        if self.target_dir.exists():
+            shutil.rmtree(self.target_dir)
         self.target_dir.mkdir(parents=True, exist_ok=True)
+        
         self.repack_dir.mkdir(parents=True, exist_ok=True)
         self.target_config_dir.mkdir(parents=True, exist_ok=True)
         self.repack_images_dir.mkdir(parents=True, exist_ok=True)
