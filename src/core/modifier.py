@@ -540,12 +540,12 @@ class SystemModifier:
     def _execute_unzip_override(self, rule):
         source_zip = Path(rule["source"])
         target_base_dir_config = rule.get("target_base_dir", "")
-        
+
         # Fix: If target_base_dir starts with "build/", remove it to avoid duplicate paths
         # e.g., "build/target/" -> "target/" since work_dir is already "build"
         if target_base_dir_config.startswith("build/"):
             target_base_dir_config = target_base_dir_config[6:]  # Remove "build/"
-        
+
         target_base_dir = self.ctx.work_dir / target_base_dir_config
 
         # Ensure asset exists (download if missing)
@@ -558,7 +558,32 @@ class SystemModifier:
         self.logger.info(f"  Unzipping '{source_zip.name}' to '{target_base_dir}'")
         try:
             with zipfile.ZipFile(source_zip, "r") as z:
-                z.extractall(target_base_dir)
+                for zinfo in z.infolist():
+                    # Check if this is a symlink (Unix mode: 0o120000 = S_IFLNK)
+                    is_symlink = False
+                    if zinfo.external_attr:
+                        # Unix mode is in high 16 bits
+                        unix_mode = (zinfo.external_attr >> 16) & 0o777777
+                        is_symlink = (unix_mode & 0o170000) == 0o120000
+
+                    target_path = target_base_dir / zinfo.filename
+
+                    if is_symlink:
+                        # Create symlink - content is the link target
+                        link_content = z.read(zinfo.filename).decode(
+                            "utf-8", errors="ignore"
+                        )
+                        target_path.parent.mkdir(parents=True, exist_ok=True)
+                        if target_path.exists() or target_path.is_symlink():
+                            target_path.unlink()
+                        target_path.symlink_to(link_content)
+                        self.logger.debug(
+                            f"  Created symlink: {zinfo.filename} -> {link_content}"
+                        )
+                    else:
+                        # Regular file/directory
+                        z.extract(zinfo, target_base_dir)
+
             self.logger.info(f"  Successfully extracted {source_zip.name}")
         except Exception as e:
             self.logger.error(f"  Failed to extract {source_zip.name}: {e}")
@@ -595,11 +620,11 @@ class SystemModifier:
         if files_to_remove:
             self.logger.info(f"  Removing {len(files_to_remove)} specified patterns...")
             target_base_dir_config = rule.get("target_base_dir", "")
-            
+
             # Fix: If target_base_dir starts with "build/", remove it to avoid duplicate paths
             if target_base_dir_config.startswith("build/"):
                 target_base_dir_config = target_base_dir_config[6:]
-            
+
             effective_base_dir_for_removes = self.ctx.work_dir / target_base_dir_config
             for pattern in files_to_remove:
                 # Support glob patterns
@@ -1617,6 +1642,102 @@ class FrameworkModifier:
             self.apkeditor_path, ["b", "-f", "-i", str(src_dir), "-o", str(out_jar)]
         )
 
+    def _insert_selinux_policy(self, cil_path: Path, config_path: Path):
+        """Insert SELinux policy rules into plat_sepolicy.cil file"""
+        import json
+        import re
+
+        self.logger.info(f"Inserting SELinux policy into {cil_path.name}")
+
+        # Load configuration
+        with open(config_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+
+        # Read existing content
+        with open(cil_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        def ensure_newline(text):
+            return text if text.endswith("\n") else text + "\n"
+
+        types = cfg.get("types", [])
+        roletype = cfg.get("roletype", {})
+        allow_rules = cfg.get("allow_rules", [])
+        allowx_rules = cfg.get("allowx_rules", [])
+        dontaudit_rules = cfg.get("dontaudit_rules", [])
+        typetransitions = cfg.get("typetransitions", [])
+        typeattributesets = cfg.get("typeattributesets", {})
+
+        # 1. Insert type / roletype
+        for t in types:
+            if f"(type {t})" not in content:
+                content = ensure_newline(content) + f"(type {t})\n"
+            if t in roletype:
+                line = f"(roletype {roletype[t]} {t})"
+                if line not in content:
+                    content += line + "\n"
+
+        # 2. Insert typeattributeset
+        for setname, new_types in typeattributesets.items():
+            pattern = re.compile(rf"\(typeattributeset\s+{setname}\s+\(([^)]*)\)\)")
+            match = pattern.search(content)
+            if match:
+                existing = match.group(1).strip().split()
+                merged = existing[:]
+                for t in new_types:
+                    if t not in merged:
+                        merged.append(t)
+                new_line = f"(typeattributeset {setname} ({' '.join(merged)}))"
+                content = pattern.sub(new_line, content, count=1)
+            else:
+                new_line = f"(typeattributeset {setname} ({' '.join(new_types)}))"
+                content = ensure_newline(content) + "\n" + new_line + "\n"
+
+        # 3. Insert allow rules
+        for rule in allow_rules:
+            subj = rule["subject"]
+            obj = rule["object"]
+            perms = rule["permissions"]
+            line = f"(allow {subj} {obj} {perms})"
+            if line not in content:
+                content = ensure_newline(content) + line + "\n"
+
+        # 4. Insert allowx rules
+        for rule in allowx_rules:
+            subj = rule["subject"]
+            obj = rule["object"]
+            cls = rule["class"]
+            perm = rule["permission"]
+            xperms = " ".join(rule["xperm"])
+            line = f"(allowx {subj} {obj} ({perm} {cls} ({xperms})))"
+            if line not in content:
+                content = ensure_newline(content) + line + "\n"
+
+        # 5. Insert dontaudit rules
+        for rule in dontaudit_rules:
+            subj = rule["subject"]
+            obj = rule["object"]
+            perms = rule["permissions"]
+            line = f"(dontaudit {subj} {obj} {perms})"
+            if line not in content:
+                content = ensure_newline(content) + line + "\n"
+
+        # 6. Insert typetransition rules
+        for ttr in typetransitions:
+            src = ttr["src"]
+            tgt = ttr["tgt"]
+            cls = ttr["class"]
+            newt = ttr["new_type"]
+            line = f"(typetransition {src} {tgt} {cls} {newt})"
+            if line not in content:
+                content = ensure_newline(content) + line + "\n"
+
+        # Write updated content
+        with open(cil_path, "w", encoding="utf-8") as f:
+            f.write(content)
+
+        self.logger.info(f"Successfully updated SELinux policy in {cil_path.name}")
+
     def _find_file(self, root, name_pattern):
         for p in Path(root).rglob(name_pattern):
             if p.is_file():
@@ -2176,20 +2297,11 @@ class FrameworkModifier:
                 regex_replace=(r"return\s+([vp]\d+)", repl_pattern),
             )
 
-        policy_tool = self.bin_dir / "insert_selinux_policy.py"
         config_json = Path("devices/common/pif_updater_policy.json")
         cil_path = self.ctx.target_dir / "system/system/etc/selinux/plat_sepolicy.cil"
 
-        if policy_tool.exists() and config_json.exists() and cil_path.exists():
-            self.shell.run(
-                [
-                    "python3",
-                    str(policy_tool),
-                    "--config",
-                    str(config_json),
-                    str(cil_path),
-                ]
-            )
+        if config_json.exists() and cil_path.exists():
+            self._insert_selinux_policy(cil_path, config_json)
 
             fc_path = (
                 self.ctx.target_dir / "system/system/etc/selinux/plat_file_contexts"
