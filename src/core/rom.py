@@ -68,6 +68,44 @@ class RomPackage:
 
         self._detect_type()
 
+    def _safe_remove(self, path: Path) -> None:
+        """Safely remove a file or directory, logging any errors."""
+        try:
+            if path.is_file():
+                path.unlink()
+            elif path.is_dir():
+                shutil.rmtree(path)
+        except Exception as e:
+            self.logger.warning(f"[{self.label}] Failed to remove {path}: {e}")
+
+    def _cleanup_extraction_dirs(self) -> None:
+        """Clean up old extraction directories and images for fresh extraction."""
+        if self.extracted_dir.exists():
+            self.logger.info(f"[{self.label}] Cleaning up old extracted directory...")
+            self._safe_remove(self.extracted_dir)
+        if self.config_dir.exists():
+            self._safe_remove(self.config_dir)
+        if any(self.images_dir.iterdir()):
+            self.logger.info(f"[{self.label}] Cleaning up old images directory...")
+            for item in self.images_dir.iterdir():
+                self._safe_remove(item)
+
+    def _move_config_file(
+        self, src: Path, dst: Path, file_type: str, part_name: str
+    ) -> bool:
+        """Move a config file from source to destination safely."""
+        if src.resolve() == dst.resolve():
+            return False
+        try:
+            if dst.exists():
+                dst.unlink()
+            shutil.move(src, dst)
+            self.logger.debug(f"[{self.label}] Saved {file_type} for {part_name}")
+            return True
+        except Exception as e:
+            self.logger.warning(f"[{self.label}] Failed to move {file_type}: {e}")
+            return False
+
     def _detect_type(self):
         """Detects ROM type (Zip, Payload, or Local Directory)"""
         if not self.path.exists():
@@ -139,21 +177,7 @@ class RomPackage:
                 f"[{self.label}] Source file changed, starting re-extraction..."
             )
             # Clean up old extracted data to avoid stale cache
-            if self.extracted_dir.exists():
-                self.logger.info(
-                    f"[{self.label}] Cleaning up old extracted directory..."
-                )
-                shutil.rmtree(self.extracted_dir)
-            if self.config_dir.exists():
-                shutil.rmtree(self.config_dir)
-            # Clean up old images as well for consistency
-            if any(self.images_dir.iterdir()):
-                self.logger.info(f"[{self.label}] Cleaning up old images directory...")
-                for item in self.images_dir.iterdir():
-                    if item.is_file():
-                        item.unlink()
-                    elif item.is_dir():
-                        shutil.rmtree(item)
+            self._cleanup_extraction_dirs()
         else:
             self.logger.info(
                 f"[{self.label}] Source file unchanged, checking cached data..."
@@ -731,20 +755,12 @@ class RomPackage:
 
         for src in possible_contexts:
             dst = self.config_dir / f"{part_name}_file_contexts"
-            if src.resolve() != dst.resolve():
-                if dst.exists():
-                    dst.unlink()
-                shutil.move(src, dst)
-                self.logger.debug(f"Saved file_contexts for {part_name}")
+            if self._move_config_file(src, dst, "file_contexts", part_name):
                 break
 
         for src in possible_fs_config:
             dst = self.config_dir / f"{part_name}_fs_config"
-            if src.resolve() != dst.resolve():
-                if dst.exists():
-                    dst.unlink()
-                shutil.move(src, dst)
-                self.logger.debug(f"Saved fs_config for {part_name}")
+            if self._move_config_file(src, dst, "fs_config", part_name):
                 break
 
         return target_dir
