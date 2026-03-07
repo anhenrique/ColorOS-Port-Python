@@ -1,9 +1,14 @@
 import json
 from pathlib import Path
 
+
 class Config:
     def __init__(self, config_data):
         self.partition_to_port = config_data.get("partition_to_port", [])
+        self.baserom_partitions = config_data.get(
+            "baserom_partitions",
+            ["system", "product", "system_ext", "my_product", "my_manifest"],
+        )
         self.possible_super_list = config_data.get("possible_super_list", [])
         self.repack_with_ext4 = config_data.get("repack_with_ext4", True)
         self.super_extended = config_data.get("super_extended", False)
@@ -16,15 +21,20 @@ class Config:
         self.enable_ksu = config_data.get("enable_ksu", False)
         self.ksu_type = config_data.get("ksu_type", "gki")
         self.disable_vbmeta = config_data.get("disable_vbmeta", False)
-        self.assets_base_url = config_data.get("assets_base_url", "https://github.com/toraidl/ColorOS-Port-Python/releases/download/assets")
+        self.assets_base_url = config_data.get(
+            "assets_base_url",
+            "https://github.com/toraidl/ColorOS-Port-Python/releases/download/assets",
+        )
 
     @classmethod
     def load(cls, device_code=None):
         base_config_path = Path("devices/common/port_config.json")
         if not base_config_path.exists():
-            raise FileNotFoundError("Base configuration not found in devices/common/port_config.json")
+            raise FileNotFoundError(
+                "Base configuration not found in devices/common/port_config.json"
+            )
 
-        with open(base_config_path, 'r') as f:
+        with open(base_config_path, "r") as f:
             config_data = json.load(f)
 
         if device_code:
@@ -32,10 +42,10 @@ class Config:
             device_config_path = Path(f"devices/target/{device_code}/port_config.json")
             if not device_config_path.exists():
                 device_config_path = Path(f"devices/{device_code}/port_config.json")
-            
+
             if device_config_path.exists():
-                with open(device_config_path, 'r') as f:
+                with open(device_config_path, "r") as f:
                     device_data = json.load(f)
                     config_data.update(device_data)
-        
+
         return cls(config_data)
