@@ -8,6 +8,7 @@ from .base import BaseHandler
 from .conditions import ConditionContext, ConditionEngine, condition_engine
 from .xml_handler import XmlFeatureHandler
 from .prop_handler import BuildPropHandler
+from .smali_handler import SmaliHandler
 from .registry import HandlerRegistry, registry
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     # Handlers
     "XmlFeatureHandler",
     "BuildPropHandler",
+    "SmaliHandler",
     # Registry
     "HandlerRegistry",
     "registry",

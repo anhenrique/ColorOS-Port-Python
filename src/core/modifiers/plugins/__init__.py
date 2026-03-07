@@ -959,11 +959,12 @@ class FeatureHandlerPlugin(ModifierPlugin):
             return True
 
         # Create handler registry and register handlers
-        from src.handlers import XmlFeatureHandler, BuildPropHandler, HandlerRegistry
+        from src.handlers import XmlFeatureHandler, BuildPropHandler, SmaliHandler, HandlerRegistry
 
         registry = HandlerRegistry()
         registry.register(XmlFeatureHandler())
         registry.register(BuildPropHandler())
+        registry.register(SmaliHandler())
 
         # Apply all handlers
         registry.apply_all(config, self.ctx)
