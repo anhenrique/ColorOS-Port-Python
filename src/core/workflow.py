@@ -1,5 +1,4 @@
 import logging
-import shutil
 import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,6 +10,7 @@ if TYPE_CHECKING:
 
 from src.utils.progress import create_progress_tracker
 from src.core.rom import ANDROID_LOGICAL_PARTITIONS
+from src.utils.file_utils import copy_file
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +59,11 @@ class PortingWorkflow:
         for fw_img in fw_images:
             try:
                 dest = repack_images_dir / fw_img.name
-                shutil.copy2(fw_img, dest)
-                copied_count += 1
-                tracker.update(message=f"Copied {fw_img.name}")
+                if copy_file(fw_img, dest):
+                    copied_count += 1
+                    tracker.update(message=f"Copied {fw_img.name}")
+                else:
+                    tracker.update(message=f"Failed {fw_img.name}")
             except Exception as e:
                 logger.error(f"Failed to copy {fw_img.name}: {e}")
                 tracker.update(message=f"Failed {fw_img.name}: {e}")

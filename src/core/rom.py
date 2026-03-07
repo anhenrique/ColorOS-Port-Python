@@ -3,8 +3,6 @@ import json
 import logging
 import os
 import re
-import shutil
-import subprocess
 import tarfile
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -15,6 +13,7 @@ from typing import Any
 
 from src.utils.imgextractor.imgextractor import Extractor
 from src.utils.shell import ShellRunner
+from src.utils.file_utils import remove_path, move_path
 
 ANDROID_LOGICAL_PARTITIONS = [
     "system",
@@ -70,25 +69,19 @@ class RomPackage:
 
     def _safe_remove(self, path: Path) -> None:
         """Safely remove a file or directory, logging any errors."""
-        try:
-            if path.is_file():
-                path.unlink()
-            elif path.is_dir():
-                shutil.rmtree(path)
-        except (OSError, PermissionError) as e:
-            self.logger.warning(f"[{self.label}] Failed to remove {path}: {e}")
+        remove_path(path)
 
     def _cleanup_extraction_dirs(self) -> None:
         """Clean up old extraction directories and images for fresh extraction."""
         if self.extracted_dir.exists():
             self.logger.info(f"[{self.label}] Cleaning up old extracted directory...")
-            self._safe_remove(self.extracted_dir)
+            remove_path(self.extracted_dir)
         if self.config_dir.exists():
-            self._safe_remove(self.config_dir)
+            remove_path(self.config_dir)
         if any(self.images_dir.iterdir()):
             self.logger.info(f"[{self.label}] Cleaning up old images directory...")
             for item in self.images_dir.iterdir():
-                self._safe_remove(item)
+                remove_path(item)
 
     def _move_config_file(
         self, src: Path, dst: Path, file_type: str, part_name: str
@@ -96,15 +89,10 @@ class RomPackage:
         """Move a config file from source to destination safely."""
         if src.resolve() == dst.resolve():
             return False
-        try:
-            if dst.exists():
-                dst.unlink()
-            shutil.move(src, dst)
+        if move_path(src, dst):
             self.logger.debug(f"[{self.label}] Saved {file_type} for {part_name}")
             return True
-        except (OSError, PermissionError, shutil.Error) as e:
-            self.logger.warning(f"[{self.label}] Failed to move {file_type}: {e}")
-            return False
+        return False
 
     def _detect_type(self) -> None:
         """Detects ROM type (Zip, Payload, or Local Directory)"""

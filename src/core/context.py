@@ -7,6 +7,7 @@ from src.core.rom import RomPackage
 from src.core.tools import ToolManager
 from src.utils.shell import ShellRunner
 from src.utils.assets import AssetManager
+from src.utils.file_utils import copy_dir, copy_file, remove_path
 
 logger = logging.getLogger(__name__)
 
@@ -128,12 +129,11 @@ class Context:
 
     def _init_workspace(self):
         # if self.build_dir.exists():
-        #     shutil.rmtree(self.build_dir)
+        #     remove_path(self.build_dir)
         self.build_dir.mkdir(parents=True, exist_ok=True)
 
         # Clean target_dir to avoid interference from previous builds
-        if self.target_dir.exists():
-            shutil.rmtree(self.target_dir)
+        remove_path(self.target_dir)
         self.target_dir.mkdir(parents=True, exist_ok=True)
 
         self.repack_dir.mkdir(parents=True, exist_ok=True)
@@ -183,28 +183,19 @@ class Context:
             f"[{source_rom.label}] Installing partition: {partition} -> {dest_dir.relative_to(self.work_dir)}"
         )
 
-        if dest_dir.exists():
-            shutil.rmtree(dest_dir)
+        remove_path(dest_dir)
 
         # 2. Copy partition files to target directory
         # Use native 'cp -af' for better performance and preservation of links/attrs
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        # cp -af src_dir/. dest_dir/ ensures contents are copied into dest_dir
-        cmd = f"cp -af {src_dir}/. {dest_dir}/"
-        try:
-            shell = ShellRunner()
-            shell.run(cmd)
-        except Exception as e:
-            self.logger.error(f"Failed to copy partition {partition}: {e}")
-            # Fallback to shutil if native cp fails
-            shutil.copytree(src_dir, dest_dir, symlinks=True, dirs_exist_ok=True)
+        if not copy_dir(src_dir, dest_dir):
+            self.logger.error(f"Failed to copy partition {partition}")
 
         # 3. Copy partition configuration files to target_config_dir for Packer
         # (Since extract_partition_to_file moved them out to source_rom/config)
         src_fs, src_fc = source_rom.get_config_files(partition)
 
         if src_fs.exists():
-            shutil.copy2(src_fs, self.target_config_dir / f"{partition}_fs_config")
+            copy_file(src_fs, self.target_config_dir / f"{partition}_fs_config")
 
         if src_fc.exists():
-            shutil.copy2(src_fc, self.target_config_dir / f"{partition}_file_contexts")
+            copy_file(src_fc, self.target_config_dir / f"{partition}_file_contexts")
