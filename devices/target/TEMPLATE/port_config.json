@@ -15,8 +15,8 @@
         "my_product",
         "my_manifest"
     ],
-    "enable_ksu": true,
-    "ksu_type": "nongki",
-    "disable_vbmeta": true,
+    "repack_with_ext4": true,
+    "super_extended": false,
+    "pack_with_dsu": false,
     "pack_method": "erofs"
 }

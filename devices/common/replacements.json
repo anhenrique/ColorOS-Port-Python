@@ -4,7 +4,7 @@
             "id": "charger_v6_update",
             "description": "Charger V6 Update for Android 14",
             "type": "unzip_override",
-            "source": "devices/common/charger-v6-update.zip",
+            "source": "devices/common/assets/charger-v6-update.zip",
             "target_base_dir": "build/target/",
             "condition": {
                 "android_version": {"min": 14, "max": 14}
@@ -20,7 +20,7 @@
             "id": "ril_fix_a13",
             "description": "RIL Fix for A13",
             "type": "unzip_override",
-            "source": "devices/common/ril_fix_a13_to_a15.zip",
+            "source": "devices/common/assets/ril_fix_a13_to_a15.zip",
             "target_base_dir": "build/target/",
             "condition": {
                 "android_version": {"min": 13, "max": 13}
@@ -30,7 +30,7 @@
             "id": "nfc_fix_a13",
             "description": "NFC Fix for A13",
             "type": "unzip_override",
-            "source": "devices/common/nfc_fix_for_a13.zip",
+            "source": "devices/common/assets/nfc_fix_for_a13.zip",
             "target_base_dir": "build/target/",
             "condition": {
                 "android_version": {"min": 13, "max": 13}
@@ -46,12 +46,12 @@
             "id": "cryptoeng_fix_a13",
             "description": "CryptoEng Fix for A13 (Conditional)",
             "type": "unzip_override",
-            "source": "devices/common/cryptoeng_fix_a13.zip",
+            "source": "devices/common/assets/cryptoeng_fix_a13.zip",
             "target_base_dir": "build/target/",
             "condition": {
                 "and": [
                     {"android_version": {"min": 13, "max": 13}},
-                    {"file_exists": "devices/common/cryptoeng_fix_a13.zip"}
+                    {"file_exists": "devices/common/assets/cryptoeng_fix_a13.zip"}
                 ]
             }
         },
@@ -104,13 +104,13 @@
             "id": "nfc_fix_a16_v2",
             "description": "NFC Fix A16 V2",
             "type": "unzip_override",
-            "source": "devices/common/nfc_fix_a16_v2.zip",
+            "source": "devices/common/assets/nfc_fix_a16_v2.zip",
             "target_base_dir": "build/target/",
             "condition": {
                 "and": [
                     {"port_android_version": {"min": 16, "max": 16}},
                     {"base_android_version": {"max": 14}},
-                    {"file_exists": "devices/common/nfc_fix_a16_v2.zip"}
+                    {"file_exists": "devices/common/assets/nfc_fix_a16_v2.zip"}
                 ]
             },
             "removes": ["system/system/priv-app/NfcNci"]
@@ -119,7 +119,7 @@
             "id": "wifi_fix_a16_cn",
             "description": "WIFI Fix A16 (CN)",
             "type": "unzip_override",
-            "source": "devices/common/wifi_fix_a16.zip",
+            "source": "devices/common/assets/wifi_fix_a16.zip",
             "target_base_dir": "build/target/",
             "condition": {
                 "and": [
@@ -134,7 +134,7 @@
             "id": "oos_1601_fix_global",
             "description": "OOS 1601 Fix (Global)",
             "type": "unzip_override",
-            "source": "devices/common/oos_1601_fix.zip",
+            "source": "devices/common/assets/oos_1601_fix.zip",
             "target_base_dir": "build/target/",
             "condition": {
                 "and": [

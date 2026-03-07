@@ -8,7 +8,7 @@
                 "and": [
                     {"rom_type": "ColorOS"},
                     {"port_android_version": {"min": 15, "max": 15}},
-                    {"file_exists": "devices/target/ONEPLUS9PRO/camera5.0-fix_cos.zip"}
+                    {"file_exists": "devices/target/ONEPLUS9PRO/assets/camera5.0-fix_cos.zip"}
                 ]
             },
             "operations": [
@@ -16,7 +16,7 @@
                     "id": "camera5_cos_framework",
                     "description": "Camera 5.0 Framework (ColorOS)",
                     "type": "unzip_override",
-                    "source": "devices/target/ONEPLUS9PRO/camera5.0-fix_cos.zip",
+                    "source": "devices/target/ONEPLUS9PRO/assets/camera5.0-fix_cos.zip",
                     "target_base_dir": "build/target/",
                     "removes": [
                         "my_product/app/OplusCamera",
@@ -32,7 +32,7 @@
                     "id": "camera5_odm",
                     "description": "Camera 5.0 ODM Files",
                     "type": "unzip_override",
-                    "source": "devices/target/ONEPLUS9PRO/camera5.0-fix_odm.zip",
+                    "source": "devices/target/ONEPLUS9PRO/assets/camera5.0-fix_odm.zip",
                     "target_base_dir": "build/target/"
                 }
             ]
@@ -45,7 +45,7 @@
                 "and": [
                     {"rom_type": "ColorOS"},
                     {"port_android_version": {"min": 16, "max": 16}},
-                    {"file_exists": "devices/target/ONEPLUS9PRO/camera6.0-fix_odm.zip"}
+                    {"file_exists": "devices/target/ONEPLUS9PRO/assets/camera6.0-fix_odm.zip"}
                 ]
             },
             "operations": [
@@ -63,7 +63,7 @@
                     "id": "camera6_cos_framework",
                     "description": "Camera 6.0 Framework (ColorOS)",
                     "type": "unzip_override",
-                    "source": "devices/common/camera6.0-fix_cos.zip",
+                    "source": "devices/common/assets/camera6.0-fix_cos.zip",
                     "target_base_dir": "build/target/",
                     "build_props": {
                         "my_product": {
@@ -75,7 +75,7 @@
                     "id": "camera6_odm",
                     "description": "Camera 6.0 ODM Files",
                     "type": "unzip_override",
-                    "source": "devices/target/ONEPLUS9PRO/camera6.0-fix_odm.zip",
+                    "source": "devices/target/ONEPLUS9PRO/assets/camera6.0-fix_odm.zip",
                     "target_base_dir": "build/target/"
                 }
             ]
@@ -88,7 +88,7 @@
                 "and": [
                     {"rom_type": "OxygenOS"},
                     {"port_android_version": {"min": 15, "max": 15}},
-                    {"file_exists": "devices/target/ONEPLUS9PRO/camera5.0-fix_oos.zip"}
+                    {"file_exists": "devices/target/ONEPLUS9PRO/assets/camera5.0-fix_oos.zip"}
                 ]
             },
             "operations": [
@@ -96,7 +96,7 @@
                     "id": "camera5_oos_framework",
                     "description": "Camera 5.0 Framework (OxygenOS)",
                     "type": "unzip_override",
-                    "source": "devices/target/ONEPLUS9PRO/camera5.0-fix_oos.zip",
+                    "source": "devices/target/ONEPLUS9PRO/assets/camera5.0-fix_oos.zip",
                     "target_base_dir": "build/target/",
                     "removes": [
                         "my_product/app/OplusCamera",
@@ -112,7 +112,7 @@
                     "id": "camera5_oos_odm",
                     "description": "Camera 5.0 ODM Files (OxygenOS)",
                     "type": "unzip_override",
-                    "source": "devices/target/ONEPLUS9PRO/camera5.0-fix_odm.zip",
+                    "source": "devices/target/ONEPLUS9PRO/assets/camera5.0-fix_odm.zip",
                     "target_base_dir": "build/target/"
                 }
             ]
@@ -121,7 +121,7 @@
             "id": "live_photo_legacy",
             "description": "Live Photo Support (Legacy Ports)",
             "type": "unzip_override",
-            "source": "devices/target/ONEPLUS9PRO/live_photo_adds.zip",
+            "source": "devices/target/ONEPLUS9PRO/assets/live_photo_adds.zip",
             "target_base_dir": "build/target/",
             "condition": {
                 "and": [
