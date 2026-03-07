@@ -7,10 +7,9 @@ import concurrent.futures
 import logging
 from pathlib import Path
 
-from src.core.modifiers.base_modifier import BaseModifier
+from src.core.modifiers.base_modifier import BaseModifier, PathCache
 from src.utils.shell import ShellRunner
-from src.utils.path_cache import PathCache
-from src.smali.smali_kit import SmaliKit, SmaliArgs
+from src.utils.smalikit import SmaliKit, SmaliArgs
 
 
 class FrameworkModifier(BaseModifier):
@@ -36,7 +35,7 @@ class FrameworkModifier(BaseModifier):
 
         self.temp_dir = self.ctx.target_dir.parent / "temp_modifier"
 
-    def run(self):
+    def run(self) -> bool:
         self.logger.info("Starting System Modification...")
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
@@ -54,6 +53,7 @@ class FrameworkModifier(BaseModifier):
 
         self._inject_xeu_toolbox()
         self.logger.info("System Modification Completed.")
+        return True
 
     def _run_smalikit(self, **kwargs):
         args = SmaliArgs(**kwargs)
