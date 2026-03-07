@@ -106,7 +106,7 @@ class RomPackage:
             self.logger.warning(f"[{self.label}] Failed to move {file_type}: {e}")
             return False
 
-    def _detect_type(self):
+    def _detect_type(self) -> None:
         """Detects ROM type (Zip, Payload, or Local Directory)"""
         if not self.path.exists():
             raise FileNotFoundError(f"Path not found: {self.path}")
@@ -136,7 +136,7 @@ class RomPackage:
 
         self.logger.info(f"[{self.label}] Detected Type: {self.rom_type.name}")
 
-    def extract_images(self, partitions: list[str] | None = None):
+    def extract_images(self, partitions: list[str] | None = None) -> None:
         """
         Level 1 Extraction: Convert Zip/Payload to Img
         :param partitions:
@@ -446,7 +446,7 @@ class RomPackage:
                     f"[{self.label}] Could not save source hash file: {e}"
                 )
 
-    def _process_sparse_images(self):
+    def _process_sparse_images(self) -> None:
         """
         Merge/Convert sparse images (super.img.*, cust.img.*) to raw images using simg2img
         """
@@ -518,7 +518,7 @@ class RomPackage:
             except (CalledProcessError, OSError) as e:
                 self.logger.error(f"Failed to merge cust.img: {e}")
 
-    def _fix_br_filenames(self):
+    def _fix_br_filenames(self) -> None:
         """
         Fix filenames with numeric suffixes in extracted BR files.
         E.g., system.1.new.dat.br -> system.new.dat.br
@@ -557,7 +557,7 @@ class RomPackage:
 
         return hash_sha256.hexdigest()[:16]
 
-    def _batch_extract_files(self, candidates: list[str]):
+    def _batch_extract_files(self, candidates: list[str]) -> None:
         """
         Batch call extract_partition_to_file (Parallel optimization)
         Automatically checks if img exists, skips if not (e.g., Base ROM might not have mi_ext)
@@ -765,7 +765,7 @@ class RomPackage:
 
         return target_dir
 
-    def get_config_files(self, part_name):
+    def get_config_files(self, part_name: str) -> tuple[Path, Path]:
         """Get config file paths for a partition"""
         return (
             self.config_dir / f"{part_name}_fs_config",
@@ -800,7 +800,7 @@ class RomPackage:
             self.logger.warning(f"Failed to detect filesystem for {img_path}: {e}")
             return "unknown"
 
-    def parse_all_props(self):
+    def parse_all_props(self) -> None:
         """
         [Optimization] Find all build.prop files in known partition locations
         Avoids slow rglob through thousands of app/lib directories.
@@ -856,7 +856,7 @@ class RomPackage:
 
         # 2. Sort (System -> Vendor -> ... -> my_product -> my_manifest)
         # Higher index means parsed LATER and thus has HIGHER priority (overwrites previous)
-        def sort_priority(path):
+        def sort_priority(path: Path) -> int:
             p = str(path).lower()
             if "system/system" in p:
                 return 0
@@ -886,7 +886,7 @@ class RomPackage:
             f"[{self.label}] Loaded {len(self.props)} properties from {len(prop_files)} files."
         )
 
-    def _load_single_prop_file(self, file_path: Path):
+    def _load_single_prop_file(self, file_path: Path) -> None:
         """Helper: Parse single file and update self.props"""
         # Calculate relative path for display (e.g. system/build.prop)
         try:
@@ -1143,7 +1143,7 @@ class RomPackage:
 
         apk_files = list(self.extracted_dir.rglob("*.apk"))
 
-        def _parse_apk(apk):
+        def _parse_apk(apk: Path) -> tuple[str | None, dict[str, Any] | None]:
             try:
                 # Use self.shell.run to handle binary pathing and LD_LIBRARY_PATH
                 # Use aapt2 as it is more modern and available in the project
@@ -1203,7 +1203,7 @@ class RomPackage:
 
         return self._apk_cache
 
-    def _save_apk_scan_results(self):
+    def _save_apk_scan_results(self) -> None:
         """Save APK scan cache to a JSON file for user inspection"""
         if not self._apk_cache:
             return
