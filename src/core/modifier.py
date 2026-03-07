@@ -22,19 +22,66 @@ from src.core.config_merger import ConfigMerger, MergeReport
 from src.handlers import XmlFeatureHandler, BuildPropHandler, HandlerRegistry
 
 
+class PathCache:
+    """Cache for file and directory path lookups to avoid repeated scans."""
+
+    def __init__(self):
+        self._file_cache = {}
+        self._dir_cache = {}
+
+    def find_file(self, root_dir: Path, filename: str) -> Path | None:
+        """Find a file recursively with caching."""
+        cache_key = (str(root_dir), filename)
+        if cache_key in self._file_cache:
+            cached_path = self._file_cache[cache_key]
+            if cached_path and cached_path.exists():
+                return cached_path
+            del self._file_cache[cache_key]
+
+        if not root_dir.exists():
+            self._file_cache[cache_key] = None
+            return None
+
+        try:
+            result = next(root_dir.rglob(filename))
+            self._file_cache[cache_key] = result
+            return result
+        except StopIteration:
+            self._file_cache[cache_key] = None
+            return None
+
+    def find_dir(self, root_dir: Path, dirname: str) -> Path | None:
+        """Find a directory recursively with caching."""
+        cache_key = (str(root_dir), dirname)
+        if cache_key in self._dir_cache:
+            cached_path = self._dir_cache[cache_key]
+            if cached_path and cached_path.exists():
+                return cached_path
+            del self._dir_cache[cache_key]
+
+        if not root_dir.exists():
+            self._dir_cache[cache_key] = None
+            return None
+
+        for p in root_dir.rglob(dirname):
+            if p.is_dir() and p.name == dirname:
+                self._dir_cache[cache_key] = p
+                return p
+
+        self._dir_cache[cache_key] = None
+        return None
+
+
 class SystemModifier:
     def __init__(self, context):
         self.ctx = context
         self.logger = logging.getLogger("Modifier")
         self.shell = ShellRunner()
+        self.path_cache = PathCache()
 
         self.bin_dir = Path("bin").resolve()
         self.apktool = self.bin_dir / "apktool.jar"
-
         self.temp_dir = self.ctx.target_dir.parent / "temp"
-
-        self._file_cache = {}  # Cache for file path lookups
-        self._dir_cache = {}  # Cache for directory path lookups
 
     def run(self):
         self.logger.info("Starting System Modification...")
@@ -70,121 +117,118 @@ class SystemModifier:
         self.logger.info("System Modification Completed.")
 
     def _migrate_oplus_features_configs(self):
-        """
-        Migrates permission and configuration files from baserom to portrom (target_dir).
-        Matches the logic from port.sh for my_product and region-specific app_v2.xml edits.
-        """
+        """Migrate permission and configuration files from baserom to portrom."""
         self.logger.info("Migrating permission and configuration files...")
 
         target_product_etc = self.ctx.target_dir / "my_product" / "etc"
         stock_product_etc = self.ctx.stock.extracted_dir / "my_product" / "etc"
 
         if not target_product_etc.exists() or not stock_product_etc.exists():
-            self.logger.warning(
-                "my_product/etc not found in target or stock, skipping migration."
-            )
+            self.logger.warning("my_product/etc not found, skipping migration.")
             return
 
-        # 1. Backup portrom permissions/extensions (currently in target_dir)
         with tempfile.TemporaryDirectory(prefix="perm_backup_") as tmp_dir:
             tmp_path = Path(tmp_dir)
-            tmp_perms = tmp_path / "permissions"
-            tmp_exts = tmp_path / "extension"
-            tmp_perms.mkdir()
-            tmp_exts.mkdir()
+            restored_count = self._backup_and_restore_permissions(
+                target_product_etc, tmp_path / "permissions"
+            )
+            self.logger.debug(f"Restored {restored_count} permission files from backup")
+            self._copy_extensions_and_configs(stock_product_etc, target_product_etc)
 
-            target_perms = target_product_etc / "permissions"
-            target_exts = target_product_etc / "extension"
+        self._apply_region_specific_fixes()
 
-            if target_perms.exists():
-                for f in target_perms.glob("*.xml"):
-                    shutil.copy2(f, tmp_perms)
+    def _backup_and_restore_permissions(self, target_product_etc, tmp_perms):
+        """Backup portrom permissions, copy baserom, then restore specific files."""
+        tmp_perms.mkdir(parents=True, exist_ok=True)
+        target_perms = target_product_etc / "permissions"
 
-            if target_exts.exists():
-                for f in target_exts.glob("*.xml"):
-                    shutil.copy2(f, tmp_exts)
+        if target_perms.exists():
+            for f in target_perms.glob("*.xml"):
+                shutil.copy2(f, tmp_perms)
 
-            # 2. Copy baserom permissions to target (overwriting)
-            stock_perms = stock_product_etc / "permissions"
-            if stock_perms.exists():
-                target_perms.mkdir(parents=True, exist_ok=True)
-                for f in stock_perms.glob("*.xml"):
-                    shutil.copy2(f, target_perms)
+        stock_perms = (
+            self.ctx.stock.extracted_dir / "my_product" / "etc" / "permissions"
+        )
+        if stock_perms.exists():
+            target_perms.mkdir(parents=True, exist_ok=True)
+            for f in stock_perms.glob("*.xml"):
+                shutil.copy2(f, target_perms)
 
-            # 3. Selectively restore portrom files from backup
-            patterns = [
-                "multimedia*.xml",
-                "*permissions*.xml",
-                "*google*.xml",
-                "*configs*.xml",
-                "*gsm*.xml",
-                "feature_activity_preload.xml",
-                "*gemini*.xml",
-                "*gms*.xml",
-            ]
+        patterns = [
+            "multimedia*.xml",
+            "*permissions*.xml",
+            "*google*.xml",
+            "*configs*.xml",
+            "*gsm*.xml",
+            "feature_activity_preload.xml",
+            "*gemini*.xml",
+            "*gms*.xml",
+        ]
 
-            for pattern in patterns:
-                for f in tmp_perms.glob(pattern):
-                    shutil.copy2(f, target_perms)
-                    self.logger.debug(f"Restored {f.name} from backup")
+        restored_count = 0
+        for pattern in patterns:
+            for f in tmp_perms.glob(pattern):
+                shutil.copy2(f, target_perms)
+                restored_count += 1
 
-            # 4. Copy more from baserom
-            stock_exts = stock_product_etc / "extension"
-            if stock_exts.exists():
-                target_exts.mkdir(parents=True, exist_ok=True)
-                for f in stock_exts.glob("*.xml"):
-                    shutil.copy2(f, target_exts)
+        return restored_count
 
-            # refresh_rate_config.xml
-            refresh_rate = stock_product_etc / "refresh_rate_config.xml"
-            if refresh_rate.exists():
-                shutil.copy2(
-                    refresh_rate, target_product_etc / "refresh_rate_config.xml"
+    def _copy_extensions_and_configs(self, stock_etc, target_etc):
+        """Copy extensions and configuration files from stock to target."""
+        stock_exts = stock_etc / "extension"
+        target_exts = target_etc / "extension"
+
+        if stock_exts.exists():
+            target_exts.mkdir(parents=True, exist_ok=True)
+            for f in stock_exts.glob("*.xml"):
+                shutil.copy2(f, target_exts)
+
+        config_files = {
+            "refresh_rate_config.xml": None,
+            "sys_resolution_switch_config.xml": None,
+            "com.oplus.sensor_config.xml": "permissions",
+        }
+
+        for config_file, subdir in config_files.items():
+            src = stock_etc / config_file
+            if src.exists():
+                dst = (
+                    target_etc / subdir / config_file
+                    if subdir
+                    else target_etc / config_file
                 )
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
 
-            # sys_resolution_switch_config.xml
-            resolution_config = stock_product_etc / "sys_resolution_switch_config.xml"
-            if resolution_config.exists():
-                shutil.copy2(
-                    resolution_config,
-                    target_product_etc / "sys_resolution_switch_config.xml",
-                )
-
-            # com.oplus.sensor_config.xml
-            sensor_config = stock_perms / "com.oplus.sensor_config.xml"
-            if sensor_config.exists():
-                shutil.copy2(
-                    sensor_config, target_perms / "com.oplus.sensor_config.xml"
-                )
-
-        # 5. Region-specific app_v2.xml edit
+    def _apply_region_specific_fixes(self):
+        """Apply region-specific app_v2.xml edits for non-CN regions."""
         regionmark = getattr(self.ctx, "base_regionmark", "CN")
-        if regionmark != "CN":
-            app_v2 = self.ctx.target_dir / "my_stock" / "etc" / "config" / "app_v2.xml"
-            if app_v2.exists():
-                self.logger.info(
-                    f"Applying region-specific fixes to {app_v2} (region: {regionmark})"
-                )
-                content = app_v2.read_text(encoding="utf-8", errors="ignore")
-                pkgs = [
-                    "com.android.contacts",
-                    "com.android.incallui",
-                    "com.android.mms",
-                    "com.oplus.blacklistapp",
-                    "com.oplus.phonenoareainquire",
-                    "com.ted.number",
-                ]
-                lines = content.splitlines()
-                new_lines = []
-                for line in lines:
-                    should_skip = False
-                    for pkg in pkgs:
-                        if pkg in line:
-                            should_skip = True
-                            break
-                    if not should_skip:
-                        new_lines.append(line)
-                app_v2.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        if regionmark == "CN":
+            return
+
+        app_v2 = self.ctx.target_dir / "my_stock" / "etc" / "config" / "app_v2.xml"
+        if not app_v2.exists():
+            return
+
+        self.logger.info(f"Applying region-specific fixes (region: {regionmark})")
+
+        pkgs_to_remove = [
+            "com.android.contacts",
+            "com.android.incallui",
+            "com.android.mms",
+            "com.oplus.blacklistapp",
+            "com.oplus.phonenoareainquire",
+            "com.ted.number",
+        ]
+
+        content = app_v2.read_text(encoding="utf-8", errors="ignore")
+        lines = [
+            line
+            for line in content.splitlines()
+            if not any(pkg in line for pkg in pkgs_to_remove)
+        ]
+
+        app_v2.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def _apply_override_zips(self):
         """
@@ -749,180 +793,197 @@ class SystemModifier:
         return ctx
 
     def _process_replacements(self):
-        """
-        Execute file/directory replacements defined in replacements.json.
-        Supports types: file, dir, package (by APK package name)
-        """
-        replacements = self._load_merged_config("replacements.json")
-        if not replacements:
+        """Execute file/directory replacements defined in replacements.json."""
+        replacements_config = self._load_merged_config("replacements.json")
+        if not replacements_config:
             return
 
         self.logger.info("Processing file replacements...")
 
         stock_root = self.ctx.stock.extracted_dir
         target_root = self.ctx.target_dir
-
-        # Pre-scan target directory for fast recursive lookups
         target_index = self._build_target_index(target_root)
-
-        # Build condition context and create evaluator
         cond_ctx = self._build_condition_context()
         evaluator = ConditionEvaluator()
 
-        def _handle_copy_op(src_item, target_item, rel_name):
-            self.logger.info(f"  Replacing/Adding: {rel_name}")
-            if not target_item.parent.exists():
-                target_item.parent.mkdir(parents=True, exist_ok=True)
-
-            if target_item.exists():
-                if target_item.is_dir():
-                    shutil.rmtree(target_item)
-                else:
-                    target_item.unlink()
-
-            if src_item.is_dir():
-                shutil.copytree(
-                    src_item, target_item, symlinks=True, dirs_exist_ok=True
-                )
-            else:
-                shutil.copy2(src_item, target_item)
-
+        rules = self._extract_rules(replacements_config)
         copy_tasks = []
 
-        if isinstance(replacements, dict):
-            # If the json is a dict with a list inside, or just list
-            rules = (
-                replacements.get("replacements", [])
-                if isinstance(replacements, dict)
-                else replacements
-            )
-        else:
-            rules = replacements
-
         for rule in rules:
-            desc = rule.get("description", "Unknown Rule")
-
-            # Use enhanced condition evaluator
             if not evaluator.evaluate(rule, cond_ctx):
-                self.logger.debug(f"Skipping rule '{desc}': conditions not met")
+                self.logger.debug(
+                    f"Skipping rule '{rule.get('description', 'Unknown')}': conditions not met"
+                )
                 continue
 
-            rtype = rule.get("type", "file")
-            search_path = rule.get("search_path", "")
-            match_mode = rule.get("match_mode", "exact")
-            ensure_exists = rule.get("ensure_exists", False)
-            files = rule.get("files", [])
-
-            self.logger.info(f"Applying rule: {desc}")
-
-            if rtype == "package":
-                self._process_package_replacement(rule, desc, stock_root, target_root)
+            if rule.get("type") == "package":
+                self._process_package_replacement(
+                    rule, rule.get("description", ""), stock_root, target_root
+                )
                 continue
 
-            rule_stock_root = stock_root / search_path
-            rule_target_root = target_root / search_path
+            tasks = self._process_file_rule(rule, stock_root, target_root, target_index)
+            copy_tasks.extend(tasks)
 
-            if not rule_stock_root.exists():
-                self.logger.debug(f"Source path not found: {rule_stock_root}")
+        self._execute_copy_tasks(copy_tasks)
+
+    def _extract_rules(self, replacements_config):
+        """Extract rules list from config (handles dict or list format)."""
+        if isinstance(replacements_config, dict):
+            return replacements_config.get("replacements", [])
+        return replacements_config
+
+    def _process_file_rule(self, rule, stock_root, target_root, target_index):
+        """Process a single file replacement rule and return copy tasks."""
+        copy_tasks = []
+        desc = rule.get("description", "Unknown Rule")
+        search_path = rule.get("search_path", "")
+        match_mode = rule.get("match_mode", "exact")
+        ensure_exists = rule.get("ensure_exists", False)
+        files = rule.get("files", [])
+
+        self.logger.info(f"Applying rule: {desc}")
+
+        rule_stock_root = stock_root / search_path
+        rule_target_root = target_root / search_path
+
+        if not rule_stock_root.exists():
+            self.logger.debug(f"Source path not found: {rule_stock_root}")
+            return copy_tasks
+
+        for pattern in files:
+            sources = self._find_sources(rule_stock_root, pattern, match_mode)
+            if not sources:
+                self.logger.debug(f"No source items found for pattern: {pattern}")
                 continue
 
-            for pattern in files:
-                sources = []
-                if match_mode == "glob":
-                    sources = list(rule_stock_root.glob(pattern))
-                elif match_mode == "recursive":
-                    sources = list(rule_stock_root.rglob(pattern))
-                else:
-                    exact_file = rule_stock_root / pattern
-                    if exact_file.exists():
-                        sources = [exact_file]
+            for src_item in sources:
+                task = self._create_copy_task(
+                    src_item, rule_target_root, target_index, match_mode, ensure_exists
+                )
+                if task:
+                    copy_tasks.append(task)
 
-                if not sources:
-                    self.logger.debug(f"No source items found for pattern: {pattern}")
-                    continue
+        return copy_tasks
 
-                for src_item in sources:
-                    rel_name = src_item.name
-                    target_item = rule_target_root / rel_name
+    def _find_sources(self, root_path, pattern, match_mode):
+        """Find source files based on match mode."""
+        if match_mode == "glob":
+            return list(root_path.glob(pattern))
+        elif match_mode == "recursive":
+            return list(root_path.rglob(pattern))
+        else:
+            exact_file = root_path / pattern
+            return [exact_file] if exact_file.exists() else []
 
-                    found_in_target = False
+    def _create_copy_task(
+        self, src_item, rule_target_root, target_index, match_mode, ensure_exists
+    ):
+        """Create a copy task tuple if conditions are met."""
+        rel_name = src_item.name
+        target_item, found_in_target = self._resolve_target_path(
+            src_item, rule_target_root, target_index, match_mode
+        )
 
-                    if match_mode == "recursive":
-                        # Use target_index for fast lookup
-                        candidates = target_index.get(rel_name, [])
-                        if candidates:
-                            # Prefer candidate that is under the rule_target_root if possible
-                            best_match = None
-                            for cand in candidates:
-                                try:
-                                    cand.relative_to(rule_target_root)
-                                    best_match = cand
-                                    break
-                                except ValueError:
-                                    continue
+        should_copy = found_in_target or ensure_exists
 
-                            if best_match:
-                                target_item = best_match
-                                found_in_target = True
-                            else:
-                                # If no candidate under rule_target_root, use the first one found
-                                target_item = candidates[0]
-                                found_in_target = True
-                    else:
-                        if target_item.exists():
-                            found_in_target = True
+        if (
+            should_copy
+            and ensure_exists
+            and not found_in_target
+            and match_mode == "recursive"
+        ):
+            try:
+                rel = src_item.relative_to(rule_target_root.parent)
+                target_item = rule_target_root.parent / rel
+            except ValueError:
+                pass
 
-                    should_copy = False
-                    if found_in_target:
-                        should_copy = True
-                    elif ensure_exists:
-                        should_copy = True
-                        if match_mode == "recursive":
-                            try:
-                                rel = src_item.relative_to(rule_stock_root)
-                                target_item = rule_target_root / rel
-                            except:
-                                pass
+        if should_copy:
+            return (src_item, target_item, rel_name)
 
-                    if should_copy:
-                        copy_tasks.append((src_item, target_item, rel_name))
-                    else:
-                        self.logger.debug(
-                            f"  Skipping {rel_name} (Target missing and ensure_exists=False)"
-                        )
+        self.logger.debug(
+            f"  Skipping {rel_name} (Target missing and ensure_exists=False)"
+        )
+        return None
 
-        # Execute all copy operations in parallel with dynamic worker count
-        if copy_tasks:
-            self.logger.info(
-                f"Executing {len(copy_tasks)} replacement tasks in parallel..."
-            )
-            # Dynamic worker count based on task count and CPU
-            cpu_count = os.cpu_count() or 4
-            # For file copy operations, use more workers as they are I/O bound
-            max_workers = min(max(cpu_count, len(copy_tasks) // 5 + 1), 8)
+    def _resolve_target_path(
+        self, src_item, rule_target_root, target_index, match_mode
+    ):
+        """Resolve target path using index for recursive matches."""
+        if match_mode == "recursive":
+            candidates = target_index.get(src_item.name, [])
+            if candidates:
+                best_match = self._find_best_candidate(candidates, rule_target_root)
+                if best_match:
+                    return best_match, True
+                return candidates[0], True
+        else:
+            if (rule_target_root / src_item.name).exists():
+                return rule_target_root / src_item.name, True
 
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=max_workers
-            ) as executor:
-                futures = [
-                    executor.submit(_handle_copy_op, *task) for task in copy_tasks
-                ]
-                # Track completion with progress
-                completed = 0
-                for future in concurrent.futures.as_completed(futures):
-                    completed += 1
-                    if completed % 10 == 0 or completed == len(copy_tasks):
-                        self.logger.debug(
-                            f"  Replacement progress: {completed}/{len(copy_tasks)}"
-                        )
+        return rule_target_root / src_item.name, False
 
-                # Check for exceptions
-                for future in futures:
-                    try:
-                        future.result()
-                    except Exception as e:
-                        self.logger.error(f"Replacement task failed: {e}")
-                        raise
+    def _find_best_candidate(self, candidates, preferred_root):
+        """Find the best candidate under the preferred root."""
+        for cand in candidates:
+            try:
+                cand.relative_to(preferred_root)
+                return cand
+            except ValueError:
+                continue
+        return None
+
+    def _execute_copy_tasks(self, copy_tasks):
+        """Execute copy operations in parallel with progress tracking."""
+        if not copy_tasks:
+            return
+
+        self.logger.info(
+            f"Executing {len(copy_tasks)} replacement tasks in parallel..."
+        )
+
+        cpu_count = os.cpu_count() or 4
+        max_workers = min(max(cpu_count, len(copy_tasks) // 5 + 1), 8)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(self._handle_copy_op, *task) for task in copy_tasks
+            ]
+            self._wait_for_tasks(futures, len(copy_tasks))
+
+    def _handle_copy_op(self, src_item, target_item, rel_name):
+        """Execute a single copy operation."""
+        self.logger.info(f"  Replacing/Adding: {rel_name}")
+
+        if not target_item.parent.exists():
+            target_item.parent.mkdir(parents=True, exist_ok=True)
+
+        if target_item.exists():
+            if target_item.is_dir():
+                shutil.rmtree(target_item)
+            else:
+                target_item.unlink()
+
+        if src_item.is_dir():
+            shutil.copytree(src_item, target_item, symlinks=True, dirs_exist_ok=True)
+        else:
+            shutil.copy2(src_item, target_item)
+
+    def _wait_for_tasks(self, futures, total_count):
+        """Wait for all tasks to complete with progress tracking."""
+        completed = 0
+        for future in concurrent.futures.as_completed(futures):
+            completed += 1
+            if completed % 10 == 0 or completed == total_count:
+                self.logger.debug(f"  Replacement progress: {completed}/{total_count}")
+
+        for future in futures:
+            try:
+                future.result()
+            except Exception as e:
+                self.logger.error(f"Replacement task failed: {e}")
+                raise
 
     def _process_package_replacement(self, rule, desc, stock_root, target_root):
         """Process replacements by APK package name"""
@@ -1418,39 +1479,12 @@ class SystemModifier:
                 prop_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
     def _find_file_recursive(self, root_dir: Path, filename: str) -> Path | None:
-        cache_key = (str(root_dir), filename)
-        if cache_key in self._file_cache:
-            cached_path = self._file_cache[cache_key]
-            if cached_path and cached_path.exists():
-                return cached_path
-            del self._file_cache[cache_key]
-
-        if not root_dir.exists():
-            return None
-        try:
-            result = next(root_dir.rglob(filename))
-            self._file_cache[cache_key] = result
-            return result
-        except StopIteration:
-            self._file_cache[cache_key] = None
-            return None
+        """Find a file recursively with caching (delegates to PathCache)."""
+        return self.path_cache.find_file(root_dir, filename)
 
     def _find_dir_recursive(self, root_dir: Path, dirname: str) -> Path | None:
-        cache_key = (str(root_dir), dirname)
-        if cache_key in self._dir_cache:
-            cached_path = self._dir_cache[cache_key]
-            if cached_path and cached_path.exists():
-                return cached_path
-            del self._dir_cache[cache_key]
-
-        if not root_dir.exists():
-            return None
-        for p in root_dir.rglob(dirname):
-            if p.is_dir() and p.name == dirname:
-                self._dir_cache[cache_key] = p
-                return p
-        self._dir_cache[cache_key] = None
-        return None
+        """Find a directory recursively with caching (delegates to PathCache)."""
+        return self.path_cache.find_dir(root_dir, dirname)
 
     def _apktool_decode(self, apk_path: Path, out_dir: Path):
         self.shell.run_java_jar(
@@ -1587,6 +1621,7 @@ class FrameworkModifier:
         self.ctx = context
         self.logger = logging.getLogger("FrameworkModifier")
         self.shell = ShellRunner()
+        self.path_cache = PathCache()
         self.bin_dir = Path("bin").resolve()
 
         self.apktool_path = self.bin_dir / "apktool" / "apktool"
@@ -1602,9 +1637,6 @@ class FrameworkModifier:
         self.PRELOADS_SHAREDUIDS = ".locals 1\n    invoke-static {}, Lcom/android/internal/util/HookHelper;->RETURN_TRUE()Z\n    move-result v0\n    sput-boolean v0, Lcom/android/server/pm/ReconcilePackageUtils;->ALLOW_NON_PRELOADS_SYSTEM_SHAREDUIDS:Z\n    return-void"
 
         self.temp_dir = self.ctx.target_dir.parent / "temp_modifier"
-
-        self._file_cache = {}
-        self._dir_cache = {}
 
     def run(self):
         self.logger.info("Starting System Modification...")
@@ -1901,39 +1933,12 @@ class FrameworkModifier:
         self._apkeditor_build(work_dir, jar_path)
 
     def _find_file_recursive(self, root_dir: Path, filename: str) -> Path | None:
-        cache_key = (str(root_dir), filename)
-        if cache_key in self._file_cache:
-            cached_path = self._file_cache[cache_key]
-            if cached_path and cached_path.exists():
-                return cached_path
-            del self._file_cache[cache_key]
-
-        if not root_dir.exists():
-            return None
-        try:
-            result = next(root_dir.rglob(filename))
-            self._file_cache[cache_key] = result
-            return result
-        except StopIteration:
-            self._file_cache[cache_key] = None
-            return None
+        """Find a file recursively with caching (delegates to PathCache)."""
+        return self.path_cache.find_file(root_dir, filename)
 
     def _find_dir_recursive(self, root_dir: Path, dirname: str) -> Path | None:
-        cache_key = (str(root_dir), dirname)
-        if cache_key in self._dir_cache:
-            cached_path = self._dir_cache[cache_key]
-            if cached_path and cached_path.exists():
-                return cached_path
-            del self._dir_cache[cache_key]
-
-        if not root_dir.exists():
-            return None
-        for p in root_dir.rglob(dirname):
-            if p.is_dir() and p.name == dirname:
-                self._dir_cache[cache_key] = p
-                return p
-        self._dir_cache[cache_key] = None
-        return None
+        """Find a directory recursively with caching (delegates to PathCache)."""
+        return self.path_cache.find_dir(root_dir, dirname)
 
     def _mod_framework(self):
         jar = self._find_file_recursive(self.ctx.target_dir, "framework.jar")
