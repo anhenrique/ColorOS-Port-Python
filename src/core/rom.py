@@ -1243,3 +1243,50 @@ class RomPackage:
     def _find_aapt(self) -> Path:
         """Find aapt binary in bin directory (Deprecated: use self.shell.run)"""
         return Path("aapt")
+
+    @classmethod
+    def detect_device_code(
+        cls, rom_path: str, args_device_code: str | None = None
+    ) -> str | None:
+        """Detect device code from ROM metadata, filename, or arguments.
+
+        Priority:
+        1. User provided device code (args_device_code)
+        2. pre-device from ZIP metadata
+        3. Filename pattern "ColorOS_<CODE>_..."
+        4. Return None as fallback
+
+        Args:
+            rom_path: Path to ROM file
+            args_device_code: Optional user-provided device code
+
+        Returns:
+            Detected device code or None
+        """
+        logger = logging.getLogger(cls.__name__)
+
+        if args_device_code:
+            return args_device_code
+
+        try:
+            with zipfile.ZipFile(rom_path, "r") as zf:
+                metadata_path = "META-INF/com/android/metadata"
+                if metadata_path in zf.namelist():
+                    with zf.open(metadata_path) as f:
+                        content = f.read().decode("utf-8")
+                        match = re.search(r"pre-device=(\S+)", content)
+                        if match:
+                            code = match.group(1)
+                            logger.info(f"Detected device code from metadata: {code}")
+                            return code
+        except Exception as e:
+            logger.debug(f"Failed to read metadata from ZIP: {e}")
+
+        filename = Path(rom_path).name
+        match = re.search(r"ColorOS_([^_]+)_", filename)
+        if match:
+            code = match.group(1)
+            logger.info(f"Detected device code from filename: {code}")
+            return code
+
+        return None
