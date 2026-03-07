@@ -173,3 +173,17 @@ class PortingWorkflow:
 
         logger.info("Initializing Porting Context...")
         return Context(config, baserom, portrom, self.work_dir, device_code)
+
+    def run_modules(self, ctx: "Context"):
+        """Run high-level feature modules."""
+        from src.modules.registry import ModuleRegistry
+
+        logger.info("Starting High-level Feature Modules...")
+        registry = ModuleRegistry(ctx)
+        registry.discover_and_register()
+        results = registry.run_all()
+
+        succeeded = sum(1 for r in results.values() if r is True)
+        failed = sum(1 for r in results.values() if r is False)
+        logger.info(f"Feature Modules execution complete: {succeeded} succeeded, {failed} failed.")
+        return results

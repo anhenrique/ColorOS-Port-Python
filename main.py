@@ -106,6 +106,10 @@ def main():
             logger.info("Starting Stage 3.5: Firmware Modification (KSU/VBMeta)...")
             FirmwareModifier(ctx).run()
 
+        with timed_stage("Stage 3.6: Feature Modules"):
+            logger.info("Starting Stage 3.6: Feature Modules...")
+            workflow.run_modules(ctx)
+
         with timed_stage("Stage 4: Repacking"):
             logger.info("Starting Stage 4: Repacking...")
             packer = Repacker(ctx)
