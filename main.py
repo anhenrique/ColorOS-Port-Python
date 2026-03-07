@@ -5,6 +5,7 @@ import re
 import shutil
 import zipfile
 from pathlib import Path
+from typing import overload, Literal
 from src.core.config import Config
 from src.core.rom import RomPackage
 from src.core.context import Context
@@ -12,7 +13,12 @@ from src.core.tools import ToolManager
 from src.core.props import PropertyModifier
 from src.core.modifier import SystemModifier, FrameworkModifier, FirmwareModifier
 from src.core.packer import Repacker
-from src.utils.progress import timed_stage, get_timer, create_progress_tracker
+from src.utils.progress import (
+    timed_stage,
+    get_timer,
+    create_progress_tracker,
+    reset_timer,
+)
 from src.utils.perf_monitor import get_monitor, reset_monitor
 
 logger = logging.getLogger(__name__)
@@ -129,6 +135,37 @@ def detect_device_code(
     return None
 
 
+@overload
+def load_config_safe(
+    device_code: str | None, is_required: Literal[True] = True
+) -> Config: ...
+
+
+@overload
+def load_config_safe(
+    device_code: str | None, is_required: Literal[False]
+) -> Config | None: ...
+
+
+def load_config_safe(
+    device_code: str | None, is_required: bool = True
+) -> Config | None:
+    try:
+        config = Config.load(device_code)
+        label = device_code if device_code else "common (initial)"
+        logger.info(f"Loaded configuration for device: {label}")
+        return config
+    except Exception as e:
+        if is_required:
+            logger.error(f"Failed to load configuration: {e}")
+            sys.exit(1)
+        else:
+            logger.warning(
+                f"No specific config for {device_code}, continuing with current config."
+            )
+            return None
+
+
 def copy_firmware_images(baserom: RomPackage, repack_images_dir: Path) -> int:
     """Copy firmware images from baserom to repack_images directory.
 
@@ -143,14 +180,14 @@ def copy_firmware_images(baserom: RomPackage, repack_images_dir: Path) -> int:
     # 1. Copy images from firmware-update directory (Brotli format)
     firmware_update_dir = baserom.images_dir / "firmware-update"
     if firmware_update_dir.exists():
-        fw_images.extend(list(firmware_update_dir.glob("*.img")))
+        fw_images.extend(firmware_update_dir.glob("*.img"))
 
     # 2. Copy storage-fw.img if exists (for some devices)
     storage_fw = baserom.images_dir / "storage-fw.img"
     if storage_fw.exists():
         fw_images.append(storage_fw)
 
-    # 3. Copy other firmware images from images root (non-logical partitions)
+    # 3. Copy other firmware images from images root (non-logical partitions only)
     for img in baserom.images_dir.glob("*.img"):
         part_name = img.stem.replace("_a", "").replace("_b", "")
         if part_name not in LOGICAL_PARTITIONS:
@@ -168,12 +205,6 @@ def copy_firmware_images(baserom: RomPackage, repack_images_dir: Path) -> int:
     copied_count = 0
     for fw_img in fw_images:
         try:
-            part_name = fw_img.stem.replace("_a", "").replace("_b", "")
-
-            if part_name in LOGICAL_PARTITIONS:
-                tracker.update(message=f"Skipped {fw_img.name} (logical partition)")
-                continue
-
             dest = repack_images_dir / fw_img.name
             shutil.copy2(fw_img, dest)
             copied_count += 1
@@ -220,8 +251,6 @@ def main():
         clean_work_dir(work_dir)
 
     # Reset and get global timer
-    from src.utils.progress import reset_timer
-
     reset_timer()
     timer = get_timer()
 
@@ -238,14 +267,7 @@ def main():
             device_code = detect_device_code(args.baserom, args.device_code)
 
             # Load configuration
-            try:
-                config = Config.load(device_code)
-                logger.info(
-                    f"Loaded configuration for device: {device_code if device_code else 'common (initial)'}"
-                )
-            except Exception as e:
-                logger.error(f"Failed to load configuration: {e}")
-                sys.exit(1)
+            config = load_config_safe(device_code, is_required=True)
 
             # Initialize Tools
             tools = ToolManager(Path("bin").resolve())
@@ -280,14 +302,7 @@ def main():
                 portrom.extract_images(portrom_partitions)
 
                 # Also extract baserom partitions needed for props reading
-                baserom_partitions = [
-                    "system",
-                    "product",
-                    "system_ext",
-                    "my_product",
-                    "my_manifest",
-                ]
-                extract_baserom_partitions(baserom, baserom_partitions)
+                extract_baserom_partitions(baserom, config.baserom_partitions)
 
             except Exception as e:
                 logger.error(f"Failed to extract ROMs: {e}")
@@ -306,15 +321,9 @@ def main():
                     )
 
                 if device_code:
-                    try:
-                        config = Config.load(device_code)
-                        logger.info(
-                            f"Reloaded configuration for detected device: {device_code}"
-                        )
-                    except Exception as e:
-                        logger.warning(
-                            f"No specific config for {device_code}, continuing with current config."
-                        )
+                    new_config = load_config_safe(device_code, is_required=False)
+                    if new_config:
+                        config = new_config
 
             # Initialize Context with finalized config
             logger.info("Initializing Porting Context...")
