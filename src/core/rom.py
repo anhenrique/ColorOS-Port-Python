@@ -1,13 +1,20 @@
+import hashlib
+import json
 import logging
-import shutil
-import zipfile
-import tarfile
-import concurrent.futures
 import os
+import re
+import shutil
+import subprocess
+import tarfile
+import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from enum import Enum, auto
 from pathlib import Path
-from src.utils.shell import ShellRunner
+from subprocess import CalledProcessError
+from typing import Any
+
 from src.utils.imgextractor.imgextractor import Extractor
+from src.utils.shell import ShellRunner
 
 ANDROID_LOGICAL_PARTITIONS = [
     "system",
@@ -493,8 +500,6 @@ class RomPackage:
         E.g., system.1.new.dat.br -> system.new.dat.br
         This matches the shell script behavior.
         """
-        import re
-
         for file_path in self.images_dir.iterdir():
             if not file_path.is_file():
                 continue
@@ -520,8 +525,6 @@ class RomPackage:
 
     def _compute_file_hash(self, file_path: Path) -> str:
         """Compute SHA-256 hash of a file for change detection."""
-        import hashlib
-
         hash_sha256 = hashlib.sha256()
 
         with open(file_path, "rb") as f:
@@ -580,7 +583,7 @@ class RomPackage:
             return
 
         # Use ThreadPoolExecutor for parallel extraction with progress tracking
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all tasks with partition names for better error reporting
             future_to_part = {
                 executor.submit(self.extract_partition_to_file, part): part
@@ -590,7 +593,7 @@ class RomPackage:
             completed = 0
             total = len(valid_partitions)
 
-            for future in concurrent.futures.as_completed(future_to_part):
+            for future in as_completed(future_to_part):
                 part = future_to_part[future]
                 try:
                     future.result()
@@ -679,8 +682,6 @@ class RomPackage:
                 self.logger.error(f"EROFS extraction failed: {e}")
                 # Fallback to 7z if erofs extraction tool fails unexpectedly
                 try:
-                    import subprocess
-
                     cmd = ["7z", "x", str(img_path), f"-o{self.extracted_dir}", "-y"]
                     subprocess.run(cmd, check=True)
                 except:
@@ -697,8 +698,6 @@ class RomPackage:
                 self.logger.error(f"EXT4 extraction failed via Extractor: {e}")
                 # Fallback to 7z
                 try:
-                    import subprocess
-
                     cmd = ["7z", "x", str(img_path), f"-o{self.extracted_dir}", "-y"]
                     subprocess.run(cmd, check=True)
                 except:
@@ -709,8 +708,6 @@ class RomPackage:
                 f"[{self.label}] Unknown filesystem {fs_type} for {part_name}, trying 7z"
             )
             try:
-                import subprocess
-
                 cmd = ["7z", "x", str(img_path), f"-o{self.extracted_dir}", "-y"]
                 subprocess.run(cmd, check=True)
             except Exception as e:
@@ -1043,8 +1040,10 @@ class RomPackage:
     @property
     def region_mark(self) -> str:
         """Region mark (default: CN)"""
-        return self.get_prop("ro.vendor.oplus.regionmark") or self.get_prop(
-            "ro.oplus.regionmark", "CN"
+        return (
+            self.get_prop("ro.vendor.oplus.regionmark")
+            or self.get_prop("ro.oplus.regionmark")
+            or "CN"
         )
 
     @property
@@ -1174,9 +1173,7 @@ class RomPackage:
                 self.logger.debug(f"Failed to parse {apk.name}: {e}")
             return None, None
 
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=os.cpu_count() or 4
-        ) as executor:
+        with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as executor:
             results = executor.map(_parse_apk, apk_files)
 
             for pkg_name, info in results:
@@ -1192,8 +1189,6 @@ class RomPackage:
 
     def _save_apk_scan_results(self):
         """Save APK scan cache to a JSON file for user inspection"""
-        import json
-
         if not self._apk_cache:
             return
 
