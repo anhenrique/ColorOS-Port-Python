@@ -567,8 +567,14 @@ class PluginManager:
                             if not plugin.timeout
                             else self._execute_with_timeout(plugin, plugin.timeout)
                         )
+                        # Flush buffered logs to file before returning
+                        if buffer_handler:
+                            buffer_handler.flush_to_target()
                         return (success, buffer_handler, None)
                     except Exception as e:
+                        # Flush buffered logs to file even on exception
+                        if buffer_handler:
+                            buffer_handler.flush_to_target()
                         return (e, buffer_handler, None)
 
                 # Submit all tasks
