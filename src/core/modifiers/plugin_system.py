@@ -172,33 +172,25 @@ class BufferedLogHandler(logging.Handler):
     def flush_to_target(self):
         """Flush buffered content to the actual logger output."""
         content = self.buffer.getvalue()
-        if content:
-            # We use target_logger.info with a custom flag or extra to avoid
-            # the standard formatter if we already formatted it,
-            # but usually it's better to just log it so it hits all handlers (File, Stream).
+        if not content:
+            return
 
-            # To avoid double formatting in the console but ensure it hits the file:
-            # We can strip the formatting we added in emit() and let the target_logger handle it,
-            # OR we can just write directly to the handlers of the target_logger.
+        root_handlers = logging.getLogger().handlers
+        local_handlers = self.target_logger.handlers
+        all_handlers = list(dict.fromkeys(root_handlers + local_handlers))
 
-            for handler in self.target_logger.handlers:
-                # If it's a StreamHandler (Console), we print the already formatted block
-                if isinstance(handler, logging.StreamHandler) and not isinstance(
-                    handler, logging.FileHandler
-                ):
-                    handler.stream.write(content)
-                    handler.flush()
-                # If it's a FileHandler, we also write it
-                elif isinstance(handler, logging.FileHandler):
-                    handler.stream.write(content)
-                    handler.flush()
-                else:
-                    # For other handlers, we might need to emit a record,
-                    # but for this specific tool, these two are the main ones.
-                    pass
+        for handler in all_handlers:
+            if isinstance(handler, logging.StreamHandler) and not isinstance(
+                handler, logging.FileHandler
+            ):
+                handler.stream.write(content)
+                handler.flush()
+            elif isinstance(handler, logging.FileHandler):
+                handler.stream.write(content)
+                handler.flush()
 
-            self.buffer.truncate(0)
-            self.buffer.seek(0)
+        self.buffer.truncate(0)
+        self.buffer.seek(0)
 
 
 class PluginManager:
