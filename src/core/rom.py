@@ -75,7 +75,7 @@ class RomPackage:
                 path.unlink()
             elif path.is_dir():
                 shutil.rmtree(path)
-        except Exception as e:
+        except (OSError, PermissionError) as e:
             self.logger.warning(f"[{self.label}] Failed to remove {path}: {e}")
 
     def _cleanup_extraction_dirs(self) -> None:
@@ -102,7 +102,7 @@ class RomPackage:
             shutil.move(src, dst)
             self.logger.debug(f"[{self.label}] Saved {file_type} for {part_name}")
             return True
-        except Exception as e:
+        except (OSError, PermissionError, shutil.Error) as e:
             self.logger.warning(f"[{self.label}] Failed to move {file_type}: {e}")
             return False
 
@@ -164,7 +164,7 @@ class RomPackage:
                 with open(source_hash_path, "r") as f:
                     saved_hash = f.read().strip()
                 source_changed = saved_hash != current_source_hash
-            except Exception:
+            except (IOError, OSError):
                 self.logger.warning(
                     f"[{self.label}] Could not read hash file, re-extracting."
                 )
@@ -284,7 +284,7 @@ class RomPackage:
                         # We use full path for safety
                         cmd = ["brotli", "-d", "-f", str(br_file), "-o", str(new_dat)]
                         self.shell.run(cmd)
-                    except Exception as e:
+                    except (CalledProcessError, FileNotFoundError) as e:
                         self.logger.error(
                             f"Brotli decompression failed for {prefix}: {e}"
                         )
@@ -321,7 +321,7 @@ class RomPackage:
                             if transfer_list.exists():
                                 os.remove(transfer_list)
 
-                    except Exception as e:
+                    except (OSError, RuntimeError) as e:
                         self.logger.error(f"sdat2img execution failed: {e}")
 
             elif self.rom_type == RomType.FASTBOOT:
@@ -417,7 +417,7 @@ class RomPackage:
                                     ["lpunpack", str(super_img), str(self.images_dir)]
                                 )
 
-                        except Exception as e:
+                        except (CalledProcessError, OSError) as e:
                             self.logger.error(f"Failed to unpack super.img: {e}")
                             raise
                         finally:
@@ -427,7 +427,7 @@ class RomPackage:
                             if super_img.exists():
                                 os.remove(super_img)
 
-        except Exception as e:
+        except (OSError, RuntimeError) as e:
             self.logger.error(f"Image extraction failed: {e}")
             raise
 
@@ -441,7 +441,7 @@ class RomPackage:
                 self.logger.info(
                     f"[{self.label}] Saved source file hash for future change detection."
                 )
-            except Exception as e:
+            except (IOError, OSError) as e:
                 self.logger.warning(
                     f"[{self.label}] Could not save source hash file: {e}"
                 )
@@ -479,7 +479,7 @@ class RomPackage:
                 # Cleanup chunks
                 for c in super_chunks:
                     os.unlink(c)
-            except Exception as e:
+            except (CalledProcessError, OSError) as e:
                 self.logger.error(f"Failed to merge super.img: {e}")
                 raise
 
@@ -493,7 +493,7 @@ class RomPackage:
             try:
                 self.shell.run([str(simg2img_bin), str(target_super), str(temp_raw)])
                 shutil.move(temp_raw, target_super)
-            except Exception as e:
+            except (CalledProcessError, OSError) as e:
                 self.logger.warning(
                     f"simg2img conversion skipped/failed (likely already raw): {e}"
                 )
@@ -515,7 +515,7 @@ class RomPackage:
                 self.shell.run(cmd)
                 for c in cust_chunks:
                     os.unlink(c)
-            except Exception as e:
+            except (CalledProcessError, OSError) as e:
                 self.logger.error(f"Failed to merge cust.img: {e}")
 
     def _fix_br_filenames(self):
@@ -626,7 +626,7 @@ class RomPackage:
                         self.logger.info(
                             f"[{self.label}] Extraction progress: {completed}/{total} partitions"
                         )
-                except Exception as e:
+                except (OSError, RuntimeError) as e:
                     self.logger.error(
                         f"[{self.label}] Partition extraction failed for {part}: {e}"
                     )
@@ -687,7 +687,7 @@ class RomPackage:
 
                 simg2img(str(img_path))
                 fs_type = self._detect_filesystem(img_path)
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 self.logger.warning(f"Sparse conversion failed: {e}")
 
         # 4. Extract based on filesystem
@@ -702,13 +702,13 @@ class RomPackage:
                     str(self.extracted_dir),
                 ]
                 self.shell.run(cmd, capture_output=True)
-            except Exception as e:
+            except (CalledProcessError, OSError) as e:
                 self.logger.error(f"EROFS extraction failed: {e}")
                 # Fallback to 7z if erofs extraction tool fails unexpectedly
                 try:
                     cmd = ["7z", "x", str(img_path), f"-o{self.extracted_dir}", "-y"]
                     subprocess.run(cmd, check=True)
-                except:
+                except (CalledProcessError, FileNotFoundError):
                     return None
         elif fs_type == "ext4":
             try:
@@ -718,13 +718,13 @@ class RomPackage:
                 extractor = Extractor()
                 # Extractor.main handles both extraction and config generation
                 extractor.main(str(img_path), str(target_dir))
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 self.logger.error(f"EXT4 extraction failed via Extractor: {e}")
                 # Fallback to 7z
                 try:
                     cmd = ["7z", "x", str(img_path), f"-o{self.extracted_dir}", "-y"]
                     subprocess.run(cmd, check=True)
-                except:
+                except (CalledProcessError, FileNotFoundError):
                     return None
         else:
             # Unknown filesystem, try 7z as last resort
@@ -734,7 +734,7 @@ class RomPackage:
             try:
                 cmd = ["7z", "x", str(img_path), f"-o{self.extracted_dir}", "-y"]
                 subprocess.run(cmd, check=True)
-            except Exception as e:
+            except (CalledProcessError, FileNotFoundError) as e:
                 self.logger.error(
                     f"Final extraction attempt failed for {part_name}: {e}"
                 )
@@ -796,7 +796,7 @@ class RomPackage:
 
             return "unknown"
 
-        except Exception as e:
+        except (IOError, OSError) as e:
             self.logger.warning(f"Failed to detect filesystem for {img_path}: {e}")
             return "unknown"
 
@@ -917,7 +917,7 @@ class RomPackage:
                     # Update current effective value (Last-win strategy)
                     self.props[key] = value
 
-        except Exception as e:
+        except (IOError, OSError) as e:
             self.logger.error(f"Error reading {rel_path}: {e}")
 
     def export_props(self, output_path: str | Path):
@@ -1185,7 +1185,7 @@ class RomPackage:
                         "version_code": version_code,
                         "version_name": version_name,
                     }
-            except Exception as e:
+            except (OSError, ValueError, AttributeError) as e:
                 self.logger.debug(f"Failed to parse {apk.name}: {e}")
             return None, None
 
@@ -1229,7 +1229,7 @@ class RomPackage:
             with open(output_file, "w", encoding="utf-8") as f:
                 json.dump(serializable, f, indent=4, ensure_ascii=False)
             self.logger.info(f"[{self.label}] APK scan results saved to: {output_file}")
-        except Exception as e:
+        except (IOError, OSError) as e:
             self.logger.warning(f"[{self.label}] Failed to save APK scan results: {e}")
 
     def _find_aapt(self) -> Path:
