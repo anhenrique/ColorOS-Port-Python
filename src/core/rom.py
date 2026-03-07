@@ -250,7 +250,7 @@ class RomPackage:
                             should_extract = True
 
                         if should_extract:
-                            self.logger.info(f"Extracting {f}...")
+                            self.logger.info(f"[{self.label}] Extracting {f}...")
                             z.extract(f, self.images_dir)
 
                 # 1.5 Fix filenames with numeric suffixes (e.g., system.1.new.dat.br -> system.new.dat.br)
@@ -304,7 +304,9 @@ class RomPackage:
                         )
 
                         if not success:
-                            self.logger.error(f"sdat2img failed for {prefix}")
+                            self.logger.error(
+                                f"[{self.label}] sdat2img failed for {prefix}"
+                            )
                         else:
                             self.logger.info(
                                 f"[{self.label}] Generated {output_img.name}"
@@ -322,7 +324,9 @@ class RomPackage:
                                 os.remove(transfer_list)
 
                     except (OSError, RuntimeError) as e:
-                        self.logger.error(f"sdat2img execution failed: {e}")
+                        self.logger.error(
+                            f"[{self.label}] sdat2img execution failed: {e}"
+                        )
 
             elif self.rom_type == RomType.FASTBOOT:
                 # Zip mode logic
@@ -355,7 +359,7 @@ class RomPackage:
                             # So we shouldn't extract boot.img etc if not requested.
                             continue
 
-                        self.logger.info(f"Extracting {f}...")
+                        self.logger.info(f"[{self.label}] Extracting {f}...")
                         # Flatten structure: Extract file to images_dir directly
                         source = z.open(f)
                         target = open(self.images_dir / Path(f).name, "wb")
@@ -418,7 +422,9 @@ class RomPackage:
                                 )
 
                         except (CalledProcessError, OSError) as e:
-                            self.logger.error(f"Failed to unpack super.img: {e}")
+                            self.logger.error(
+                                f"[{self.label}] Failed to unpack super.img: {e}"
+                            )
                             raise
                         finally:
                             # Cleanup super.img to save space?
@@ -428,7 +434,7 @@ class RomPackage:
                                 os.remove(super_img)
 
         except (OSError, RuntimeError) as e:
-            self.logger.error(f"Image extraction failed: {e}")
+            self.logger.error(f"[{self.label}] Image extraction failed: {e}")
             raise
 
         self._batch_extract_files(partitions or ANDROID_LOGICAL_PARTITIONS)
@@ -480,7 +486,7 @@ class RomPackage:
                 for c in super_chunks:
                     os.unlink(c)
             except (CalledProcessError, OSError) as e:
-                self.logger.error(f"Failed to merge super.img: {e}")
+                self.logger.error(f"[{self.label}] Failed to merge super.img: {e}")
                 raise
 
         elif target_super.exists():
@@ -516,7 +522,7 @@ class RomPackage:
                 for c in cust_chunks:
                     os.unlink(c)
             except (CalledProcessError, OSError) as e:
-                self.logger.error(f"Failed to merge cust.img: {e}")
+                self.logger.error(f"[{self.label}] Failed to merge cust.img: {e}")
 
     def _fix_br_filenames(self) -> None:
         """
@@ -544,7 +550,9 @@ class RomPackage:
                 if new_name != name:
                     new_file_path = self.images_dir / f"{new_name}{ext}"
                     if new_file_path != file_path:
-                        self.logger.info(f"Renaming {filename} -> {new_file_path.name}")
+                        self.logger.info(
+                            f"[{self.label}] Renaming {filename} -> {new_file_path.name}"
+                        )
                         shutil.move(str(file_path), str(new_file_path))
 
     def _compute_file_hash(self, file_path: Path) -> str:
