@@ -7,7 +7,9 @@ from src.core.config import Config
 from src.core.rom import RomPackage
 from src.core.context import Context
 from src.core.props import PropertyModifier
-from src.core.modifier import SystemModifier, FrameworkModifier, FirmwareModifier
+from src.core.modifiers.unified_modifier import UnifiedModifier
+from src.core.modifiers.framework_modifier import FrameworkModifier
+from src.core.modifiers.firmware_modifier import FirmwareModifier
 from src.core.packer import Repacker
 from src.core.workflow import PortingWorkflow
 from src.utils.logging_config import setup_logging
@@ -91,9 +93,13 @@ def main():
             logger.info("Starting Stage 2: Property Modification...")
             PropertyModifier(ctx).run()
 
-        with timed_stage("Stage 3: Smali Patching"):
-            logger.info("Starting Stage 3: Smali Patching...")
-            SystemModifier(ctx).run()
+        with timed_stage("Stage 3: System Modification"):
+            logger.info("Starting Stage 3: System Modification...")
+            unified = UnifiedModifier(ctx)
+            unified.run()
+
+        with timed_stage("Stage 3.5: Framework Smali Patching"):
+            logger.info("Starting Stage 3.5: Framework Smali Patching...")
             FrameworkModifier(ctx).run()
 
         with timed_stage("Stage 3.5: Firmware Modification"):
