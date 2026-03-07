@@ -1,5 +1,9 @@
 import json
+import logging
+import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 class Config:
@@ -38,7 +42,6 @@ class Config:
             config_data = json.load(f)
 
         if device_code:
-            # Check both devices/target/{code} and devices/{code} for compatibility
             device_config_path = Path(f"devices/target/{device_code}/port_config.json")
             if not device_config_path.exists():
                 device_config_path = Path(f"devices/{device_code}/port_config.json")
@@ -49,3 +52,20 @@ class Config:
                     config_data.update(device_data)
 
         return cls(config_data)
+
+    @classmethod
+    def load_safe(cls, device_code: str | None = None, is_required: bool = True):
+        try:
+            config = cls.load(device_code)
+            label = device_code if device_code else "common (initial)"
+            logger.info(f"Loaded configuration for device: {label}")
+            return config
+        except Exception as e:
+            if is_required:
+                logger.error(f"Failed to load configuration: {e}")
+                sys.exit(1)
+            else:
+                logger.warning(
+                    f"No specific config for {device_code}, continuing with current config."
+                )
+                return None
