@@ -41,7 +41,7 @@ class RomType(Enum):
     BROTLI = auto()  # new.dat.br
     FASTBOOT = auto()  # super.img or tgz
     LOCAL_DIR = auto()  # Pre-extracted directory
-
+    SAMSUNG = auto()
 
 class RomPackage:
     def __init__(self, file_path: str | Path, work_dir: str | Path, label: str = "Rom"):
@@ -67,6 +67,14 @@ class RomPackage:
 
         self._detect_type()
 
+    @staticmethod
+    def detect_device_code(rom_path: Path, args_device_code: str = None) -> str:
+        if args_device_code:
+            return args_device_code
+        filename = rom_path.name.upper()
+        if "S911" in filename: return "s23"
+        if "S918" in filename: return "s23u"
+        return "generic"
     def _safe_remove(self, path: Path) -> None:
         """Safely remove a file or directory, logging any errors."""
         remove_path(path)

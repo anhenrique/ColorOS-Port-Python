@@ -25,8 +25,7 @@ class BaseExtractor(ABC):
 class PayloadExtractor(BaseExtractor):
     def extract(self, partitions: Optional[List[str]] = None) -> None:
         self.logger.info(f"[{self.label}] Starting Payload extraction...")
-        cmd = ["payload-dumper", "--out", str(self.images_dir)]
-        
+        cmd = ["payload-dumper-go", "-c", "1", "-o", str(self.images_dir)]
         if partitions:
             self.logger.info(f"[{self.label}] Extracting specific images: {partitions} ...")
             cmd.extend(["--partitions", ",".join(partitions)])
@@ -171,4 +170,16 @@ class RomExtractorFactory:
             return FastbootExtractor(rom_path, images_dir, label)
         elif rom_type == RomType.LOCAL_DIR:
             return LocalDirExtractor(rom_path, images_dir, label)
+        elif rom_type == RomType.SAMSUNG: return SamsungExtractor(rom_path, images_dir, label)
         raise ValueError(f"Unsupported ROM type: {rom_type}")
+        
+    
+class SamsungExtractor(BaseExtractor):
+    def extract(self, partitions: list = None) -> None:
+        self.logger.info(f"[{self.label}] Extraindo Firmware Samsung (TAR/LZ4)...")
+        import tarfile
+        with tarfile.open(self.rom_path, "r") as tar:
+            tar.extractall(path=self.images_dir)
+        for lz4_file in self.images_dir.glob("*.lz4"):
+            self.shell.run(["lz4", "-d", "-f", "-m", str(lz4_file)])
+            lz4_file.unlink()

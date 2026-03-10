@@ -25,6 +25,10 @@ class Context:
         self.baserom = baserom
         self.portrom = portrom
 
+        self.stock = baserom
+        self.port = portrom
+        self.stock_rom_code = device_code
+
         # Compatibility aliases for modifier.py
         self.stock = baserom
         self.port = portrom
