@@ -1,0 +1,15 @@
+{
+    "replacements": [
+        {
+            "id": "samsung_dm1q_fix",
+            "description": "Preservar drivers críticos Samsung S23",
+            "type": "unzip_override",
+            "source": "devices/chipset/SM8550/assets/s23_blobs.zip",
+            "target_base_dir": "build/target/",
+            "removes": [
+                "vendor/lib64/hw/audio.primary.kalama.so",
+                "odm/lib64/libmmipl.so"
+            ]
+        }
+    ]
+}

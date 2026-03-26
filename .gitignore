@@ -36,6 +36,7 @@ devices/**/*.apk
 *.img
 *.bin
 tmp/
+temp_*/
 
 # Editor specific
 .idea/
