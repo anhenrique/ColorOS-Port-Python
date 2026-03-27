@@ -31,7 +31,8 @@ class Repacker:
         self.fix_timestamp = "1230768000"
         # Define OTA output directory structure
         self.out_dir = Path("out").resolve()
-        self.product_out = self.out_dir / "target" / "product" / self.ctx.baserom.vendor_device
+        #self.product_out = self.out_dir / "target" / "product" / self.ctx.baserom.vendor_device
+        self.product_out = self.out_dir / "target" / "product" / (self.ctx.baserom.vendor_device or "dm1q")
         self.images_out = self.product_out / "IMAGES"
         self.meta_out = self.product_out / "META"
         self.ota_tools_dir = Path("otatools").resolve()        
