@@ -181,10 +181,13 @@ class RomPackage:
 
         # === Step 1: Extract Images via Factory ===
         try:
-            extractor = RomExtractorFactory.get_extractor(
-                self.rom_type, self.path, self.images_dir, self.label
-            )
-            extractor.extract(partitions)
+            # >>> INÍCIO DA CORREÇÃO <<<
+            if self.rom_type != RomType.LOCAL_DIR:
+                extractor = RomExtractorFactory.get_extractor(
+                    self.rom_type, self.path, self.images_dir, self.label
+                )
+                extractor.extract(partitions)
+            # >>> FIM DA CORREÇÃO <<<
         except (OSError, RuntimeError) as e:
             self.logger.error(f"[{self.label}] Image extraction failed: {e}")
             raise
@@ -206,9 +209,15 @@ class RomPackage:
 
     def _compute_file_hash(self, file_path: Path) -> str:
         """Compute SHA-256 hash of a file for change detection."""
+        # >>> INÍCIO DA CORREÇÃO <<<
+        if file_path.is_dir():
+            return "local_directory_hash_bypass"
+        # >>> FIM DA CORREÇÃO <<<
+        
         hash_sha256 = hashlib.sha256()
 
         with open(file_path, "rb") as f:
+
             for chunk in iter(lambda: f.read(4096), b""):
                 hash_sha256.update(chunk)
 
