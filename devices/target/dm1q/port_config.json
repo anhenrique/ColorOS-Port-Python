@@ -1,0 +1,63 @@
+{
+  "_comment": "Samsung Galaxy S23 (dm1q) - Snapdragon 8 Gen 2 (SM8550/Kalama)",
+  "_base_rom": "Evolution X (AOSP)",
+  "_port_rom": "ColorOS (OPPO/OnePlus)",
+
+  "partition_to_port": [
+    "system",
+    "system_ext",
+    "product"
+  ],
+
+  "_comment_partitions": [
+    "Evolution X NAO tem my_product, my_engineering, my_heytap etc.",
+    "Portamos apenas system, system_ext e product da ColorOS.",
+    "vendor, odm, vendor_dlkm ficam da base Evolution X para manter",
+    "drivers Samsung (camera, audio, sensores) funcionando."
+  ],
+
+  "possible_super_list": [
+    "system",
+    "system_ext",
+    "product",
+    "vendor",
+    "odm",
+    "vendor_dlkm"
+  ],
+
+  "baserom_partitions": [
+    "system",
+    "system_ext",
+    "product",
+    "vendor",
+    "odm",
+    "vendor_dlkm"
+  ],
+
+  "reusable_partition_list": [
+    "vendor",
+    "odm",
+    "vendor_dlkm"
+  ],
+
+  "chipset": "SM8550",
+  "chipset_family": "kalama",
+  "ddr_type": "ddr5",
+
+  "repack_with_ext4": false,
+  "pack_method": "erofs",
+  "super_extended": false,
+  "pack_with_dsu": false,
+
+  "system_dlkm_enabled": false,
+  "vendor_dlkm_enabled": true,
+
+  "enable_ksu": false,
+  "ksu_type": "gki",
+  "disable_vbmeta": true,
+
+  "is_ab_device": true,
+
+  "aosp_base": true,
+  "_aosp_base_note": "Flag para indicar que a base e AOSP/custom ROM sem particoes oplus (my_product etc.)"
+}

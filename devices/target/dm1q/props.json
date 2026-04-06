@@ -1,0 +1,161 @@
+{
+  "_comment": "Props config para dm1q (Galaxy S23) com base AOSP (Evolution X)",
+  "version": 2,
+  "rules": [
+    {
+      "name": "string_replace",
+      "priority": 10,
+      "enabled": true,
+      "description": "Substitui device/model da ColorOS pelos valores do S23",
+      "config": {
+        "mappings": [
+          { "from": "port_vendor_device",  "to": "base_vendor_device" },
+          { "from": "port_vendor_model",   "to": "base_vendor_model" },
+          { "from": "port_product_device", "to": "base_product_device" },
+          { "from": "port_product_model",  "to": "base_product_model" }
+        ]
+      }
+    },
+    {
+      "name": "prop_set",
+      "priority": 20,
+      "enabled": true,
+      "description": "Forcando props do Samsung S23 / Snapdragon 8 Gen 2",
+      "config": {
+        "properties": [
+          {
+            "key": "ro.product.vendor.device",
+            "value": "dm1q",
+            "target_partition": "vendor"
+          },
+          {
+            "key": "ro.product.vendor.name",
+            "value": "dm1q",
+            "target_partition": "vendor"
+          },
+          {
+            "key": "ro.product.vendor.model",
+            "value": "SM-S911B",
+            "target_partition": "vendor"
+          },
+          {
+            "key": "ro.product.vendor.brand",
+            "value": "samsung",
+            "target_partition": "vendor"
+          },
+          {
+            "key": "ro.product.device",
+            "value": "dm1q",
+            "target_partition": "system"
+          },
+          {
+            "key": "ro.product.model",
+            "value": "SM-S911B",
+            "target_partition": "system"
+          },
+          {
+            "key": "ro.product.brand",
+            "value": "samsung",
+            "target_partition": "system"
+          },
+          {
+            "key": "ro.product.manufacturer",
+            "value": "Samsung",
+            "target_partition": "system"
+          },
+          {
+            "key": "ro.board.platform",
+            "value": "kalama",
+            "target_partition": "system"
+          },
+          {
+            "key": "ro.hardware",
+            "value": "kalama",
+            "target_partition": "system"
+          },
+          {
+            "key": "ro.boot.hardware",
+            "value": "kalama",
+            "target_partition": "system"
+          },
+          {
+            "key": "ro.sf.lcd_density",
+            "source": "base_lcd_density",
+            "target_partition": "system",
+            "_note": "Preserva densidade de tela do S23 (393dpi)"
+          },
+          {
+            "key": "ro.build.ab_update",
+            "value": "true",
+            "target_partition": "system"
+          },
+          {
+            "key": "ro.build.ab_update",
+            "value": "true",
+            "target_partition": "vendor"
+          }
+        ]
+      }
+    },
+    {
+      "name": "prop_set",
+      "priority": 25,
+      "enabled": true,
+      "description": "Removendo/substituindo props Oplus incompativeis com AOSP",
+      "config": {
+        "properties": [
+          {
+            "key": "ro.oplus.image.system_ext.area",
+            "value": "gdpr",
+            "target_partition": "system_ext",
+            "_note": "Garante que ColorOS entenda que e versao global"
+          },
+          {
+            "key": "ro.oplus.image.system_ext.brand",
+            "value": "oneplus",
+            "target_partition": "system_ext",
+            "_note": "Necessario para ColorOS Global iniciar corretamente"
+          },
+          {
+            "key": "persist.sys.timezone",
+            "value": "America/Sao_Paulo",
+            "target_partition": "system",
+            "_note": "Timezone padrao Brasil"
+          }
+        ]
+      }
+    },
+    {
+      "name": "prop_copy",
+      "priority": 30,
+      "enabled": true,
+      "description": "Copia props criticas da base Evolution X para preservar hardware Samsung",
+      "config": {
+        "properties": [
+          { "key": "ro.build.version.security_patch" },
+          { "key": "ro.vendor.build.security_patch" },
+          { "key": "ro.build.version.release" },
+          { "key": "ro.build.version.sdk" },
+          { "key": "ro.build.id" },
+          { "key": "ro.build.version.incremental" },
+          { "key": "ro.product.first_api_level" },
+          { "key": "ro.board.first_api_level" }
+        ]
+      }
+    },
+    {
+      "name": "fingerprint",
+      "priority": 90,
+      "enabled": true,
+      "description": "Regenera fingerprint baseado nas props finais do S23",
+      "config": {
+        "priority_partitions": [
+          "vendor",
+          "system",
+          "product",
+          "system_ext"
+        ]
+      }
+    }
+  ]
+}
