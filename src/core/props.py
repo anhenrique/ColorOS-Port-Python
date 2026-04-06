@@ -143,20 +143,32 @@ class PropertyModifier:
         target_prop_main = target_my_product / "build.prop"
         target_prop_bruce = target_my_product / "etc" / "bruce" / "build.prop"
         
-        # 2. Parse Props
-        base_props = self._read_prop_to_dict(base_prop_file)
+        # 2. Detecta se base e AOSP (sem my_product)
+        base_is_aosp = not base_prop_file.exists()
+        if base_is_aosp:
+            logger.info("Base AOSP detectada (sem my_product) - usando portrom como fonte")
+
+        # 3. Parse Props
+        base_props = self._read_prop_to_dict(base_prop_file) if not base_is_aosp else {}
         port_props = self._read_prop_to_dict(port_prop_file)
         
-        # 3. Calculate Bruce Props (Port-only props + Force keys)
+        # 4. Calculate Bruce Props
+        # Base AOSP: todas as props do port vao para bruce
+        # Base Oplus: somente force_keys e props exclusivos do port
         bruce_props = {}
         for key, value in port_props.items():
-            if key in force_keys or key not in base_props:
+            if base_is_aosp or key in force_keys or key not in base_props:
                 bruce_props[key] = value
                 logger.debug(f"Adding to bruce.prop: {key}={value}")
         
-        # 4. Overwrite target main prop with Base content
-        if base_prop_file.exists():
+        # 5. Overwrite target main prop
+        if not base_is_aosp and base_prop_file.exists():
             shutil.copy2(base_prop_file, target_prop_main)
+        elif port_prop_file.exists():
+            # Base AOSP: usa portrom como base do prop principal
+            shutil.copy2(port_prop_file, target_prop_main)
+        if False:  # placeholder para if original - mantido para compatibilidade
+            pass
         
         # 5. Ensure Import statement in main prop
         content = target_prop_main.read_text(encoding="utf-8", errors="ignore")
@@ -174,12 +186,31 @@ class PropertyModifier:
         logger.info(f"Reconstruction complete. {len(bruce_props)} props moved to bruce/build.prop")
     
     def _find_build_prop(self, partition_dir: Path) -> Path:
-        """Find build.prop in partition directory (handling etc/ subdirectory)."""
+        """
+        Find build.prop in partition directory.
+        FIX-1 dm1q: Evolution X usa path aninhado, ex: system/system/build.prop
+        """
+        # Tenta path aninhado primeiro (ex: system/system/build.prop)
+        part_name = partition_dir.name
+        nested_same = partition_dir / part_name / "build.prop"
+        if nested_same.exists():
+            return nested_same
         direct = partition_dir / "build.prop"
         if direct.exists():
             return direct
-        nested = partition_dir / "etc" / "build.prop"
-        return nested
+        nested_etc = partition_dir / "etc" / "build.prop"
+        return nested_etc
+
+    def _find_partition_root(self, partition_dir: Path) -> Path:
+        """
+        Retorna o diretório raiz real da partição.
+        FIX-1 dm1q: Evolution X aninha system dentro de system/.
+        """
+        part_name = partition_dir.name
+        nested = partition_dir / part_name
+        if nested.exists() and nested.is_dir():
+            return nested
+        return partition_dir
     
     def _read_prop_to_dict(self, file_path: Path) -> Dict[str, str]:
         """Read properties file into dictionary."""

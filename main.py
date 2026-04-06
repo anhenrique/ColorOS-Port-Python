@@ -79,7 +79,11 @@ def main():
                 baserom, device_code, config
             )
             ctx = workflow.create_context(config, baserom, portrom, device_code)
-
+            if device_code == "dm1q":
+                ctx.chipset = "SM8550"
+                logger.info("📱 Dispositivo Samsung Galaxy S23 (dm1q) detectado.")
+                logger.info("🔧 Forçando perfil de chipset: Snapdragon 8 Gen 2 (Kalama)")
+                
         with timed_stage("Stage 1: Partition Installation"):
             logger.info("Starting Stage 1: Partition Installation...")
             ctx.install_partitions()

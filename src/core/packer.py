@@ -31,10 +31,11 @@ class Repacker:
         self.fix_timestamp = "1230768000"
         # Define OTA output directory structure
         self.out_dir = Path("out").resolve()
-        self.product_out = self.out_dir / "target" / "product" / self.ctx.baserom.vendor_device
+        #self.product_out = self.out_dir / "target" / "product" / self.ctx.baserom.vendor_device
+        self.product_out = self.out_dir / "target" / "product" / (self.ctx.baserom.vendor_device or "dm1q")
         self.images_out = self.product_out / "IMAGES"
         self.meta_out = self.product_out / "META"
-        self.ota_tools_dir = Path("otatools").resolve()
+        self.ota_tools_dir = Path("otatools").resolve()        
 
     def pack_all(self, pack_type="EROFS", is_rw=False):
         """
@@ -128,6 +129,21 @@ class Repacker:
         file_contexts = self.ctx.target_config_dir / f"{part_name}_file_contexts"
 
         self.logger.info(f"Packing [{part_name}] as {pack_type}...")
+
+        # FIX-dm1q: pula particoes oplus sem config
+        _oplus_stubs = [
+            "my_product", "my_manifest", "my_engineering", "my_company",
+            "my_carrier", "my_region", "my_heytap", "my_stock",
+            "my_preload", "my_bigball",
+        ]
+        if part_name in _oplus_stubs and (
+            not fs_config.exists() or not file_contexts.exists()
+        ):
+            self.logger.warning(
+                f"[dm1q] Pulando {part_name}: sem fs_config/file_contexts. "
+                f"Nao sera incluida no super.img."
+            )
+            return
 
         self._run_patch_tools(src_dir, fs_config, file_contexts)
 
@@ -469,7 +485,13 @@ class Repacker:
                             f"{part}_b:none:0:qti_dynamic_partitions_b",
                         ]
                     )
-
+        # No início da classe Repacker ou no método pack_super_image
+        if self.ctx.device_code == "dm1q":
+        # Tamanho do Super para S23 (aprox 9.1GB)
+            SUPER_SIZE = 9126805504 
+            BLOCK_SIZE = 4096
+            metadata_size = 65536
+            metadata_slots = 3
         # 4. Run lpmake
         try:
             self.shell.run(base_args)

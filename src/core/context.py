@@ -37,6 +37,8 @@ class Context:
         self.device_code = device_code
         self.stock_rom_code = device_code
 
+        self.chipset = None
+
         self.assets = AssetManager(self.config.assets_base_url)
 
         # Configuration properties

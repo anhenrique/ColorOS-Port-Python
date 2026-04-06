@@ -1,0 +1,17 @@
+{
+  "possible_super_list": [
+    "system",
+    "system_ext",
+    "product",
+    "vendor",
+    "odm",
+    "vendor_dlkm"
+  ],
+  "partition_to_port": [
+    "system",
+    "system_ext",
+    "product"
+  ],
+  "enable_ksu": false,
+  "disable_vbmeta": true
+}

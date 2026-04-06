@@ -36,7 +36,10 @@ devices/**/*.apk
 *.img
 *.bin
 tmp/
-
+temp_*/
+dm1q_patch/
+*:Zone.Identifier*
+*.bak*
 # Editor specific
 .idea/
 .vscode/
