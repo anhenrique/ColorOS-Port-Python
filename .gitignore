@@ -37,6 +37,8 @@ devices/**/*.apk
 *.bin
 tmp/
 temp_*/
+dm1q_patch/
+*:Zone.Identifier*
 
 # Editor specific
 .idea/
