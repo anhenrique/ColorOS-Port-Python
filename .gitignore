@@ -49,6 +49,8 @@ roms/
 
 
 
+*.bak*
+
 # Editor specific
 .idea/
 .vscode/

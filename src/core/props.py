@@ -186,12 +186,31 @@ class PropertyModifier:
         logger.info(f"Reconstruction complete. {len(bruce_props)} props moved to bruce/build.prop")
     
     def _find_build_prop(self, partition_dir: Path) -> Path:
-        """Find build.prop in partition directory (handling etc/ subdirectory)."""
+        """
+        Find build.prop in partition directory.
+        FIX-1 dm1q: Evolution X usa path aninhado, ex: system/system/build.prop
+        """
+        # Tenta path aninhado primeiro (ex: system/system/build.prop)
+        part_name = partition_dir.name
+        nested_same = partition_dir / part_name / "build.prop"
+        if nested_same.exists():
+            return nested_same
         direct = partition_dir / "build.prop"
         if direct.exists():
             return direct
-        nested = partition_dir / "etc" / "build.prop"
-        return nested
+        nested_etc = partition_dir / "etc" / "build.prop"
+        return nested_etc
+
+    def _find_partition_root(self, partition_dir: Path) -> Path:
+        """
+        Retorna o diretório raiz real da partição.
+        FIX-1 dm1q: Evolution X aninha system dentro de system/.
+        """
+        part_name = partition_dir.name
+        nested = partition_dir / part_name
+        if nested.exists() and nested.is_dir():
+            return nested
+        return partition_dir
     
     def _read_prop_to_dict(self, file_path: Path) -> Dict[str, str]:
         """Read properties file into dictionary."""

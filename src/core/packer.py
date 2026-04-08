@@ -130,17 +130,31 @@ class Repacker:
 
         self.logger.info(f"Packing [{part_name}] as {pack_type}...")
 
+<<<<<<< HEAD
         # FIX-dm1q: partições oplus sem fs_config causam erro no mkfs.erofs
         _OPLUS_STUBS = [
+=======
+        # FIX-dm1q: pula particoes oplus sem config
+        _oplus_stubs = [
+>>>>>>> e98abe7a534c0ac8cfe7c001d70322dc8fc4ae0e
             "my_product", "my_manifest", "my_engineering", "my_company",
             "my_carrier", "my_region", "my_heytap", "my_stock",
             "my_preload", "my_bigball",
         ]
+<<<<<<< HEAD
         if part_name in _OPLUS_STUBS and (
             not fs_config.exists() or not file_contexts.exists()
         ):
             self.logger.warning(
                 f"[dm1q] Pulando {part_name}: sem fs_config/file_contexts."
+=======
+        if part_name in _oplus_stubs and (
+            not fs_config.exists() or not file_contexts.exists()
+        ):
+            self.logger.warning(
+                f"[dm1q] Pulando {part_name}: sem fs_config/file_contexts. "
+                f"Nao sera incluida no super.img."
+>>>>>>> e98abe7a534c0ac8cfe7c001d70322dc8fc4ae0e
             )
             return
 
