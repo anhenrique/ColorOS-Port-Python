@@ -70,6 +70,7 @@ class Dm1qAospCompatModule(BaseModule):
 
     def run(self) -> bool:
         logger.info("=" * 60)
+        ok &= self._fix_fingerprint_dm1q(target_dir)
         logger.info("dm1q AOSP Compat: Iniciando patches de compatibilidade...")
         logger.info("=" * 60)
 
@@ -114,44 +115,73 @@ class Dm1qAospCompatModule(BaseModule):
         return True
 
     def _create_stub_my_product(self, target_dir: Path) -> bool:
-        """
-        Cria uma particao my_product stub minima.
-
-        A ColorOS referencia my_product em varios lugares. Sem ela, pode
-        ocorrer crash no SystemServer. Criamos uma versao minima com apenas
-        o build.prop necessario.
-        """
+        """Cria stub mínimo de my_product SE não existir."""
         my_product_dir = target_dir / "my_product"
 
         if my_product_dir.exists() and (my_product_dir / "build.prop").exists():
-            logger.info("my_product ja existe e tem build.prop, pulando stub.")
-            return True
+            logger.info("my_product/build.prop já existe, pulando stub.")
+        else:
+            logger.info("Criando stub de my_product...")
+            my_product_dir.mkdir(parents=True, exist_ok=True)
+            (my_product_dir / "etc" / "bruce").mkdir(parents=True, exist_ok=True)
+            stub = "
+".join([
+                "# my_product stub — dm1q_aosp_compat",
+                "ro.oplus.image.my_product.type=all",
+                "ro.product.my_product.brand=samsung",
+                "ro.product.my_product.device=dm1q",
+                "ro.product.my_product.model=SM-S911B",
+                "ro.product.my_product.name=dm1q",
+                "ro.product.my_product.manufacturer=Samsung", "",
+            ])
+            (my_product_dir / "build.prop").write_text(stub, encoding="utf-8")
+            (my_product_dir / "etc" / "bruce" / "build.prop").write_text(
+                "# bruce stub
+", encoding="utf-8"
+            )
+            logger.info(f"  Stub criado: {my_product_dir}/build.prop")
 
-        logger.info("Criando stub de my_product para compatibilidade AOSP...")
+        # Sempre garante fs_config e file_contexts para packer
+        self._generate_fs_config_for_stubs(target_dir)
+        return True
 
-        my_product_dir.mkdir(parents=True, exist_ok=True)
-        etc_dir = my_product_dir / "etc"
-        etc_dir.mkdir(exist_ok=True)
+    def _generate_fs_config_for_stubs(self, target_dir: Path) -> bool:
+        """Gera fs_config e file_contexts mínimos para my_product e my_manifest."""
+        config_dir = self.ctx.target_config_dir
+        config_dir.mkdir(parents=True, exist_ok=True)
 
-        # build.prop minimo - apenas o necessario para ColorOS nao crashar
-        stub_props = [
-            "# my_product stub - gerado pelo dm1q_aosp_compat module",
-            "# Necessario para compatibilidade ColorOS em base AOSP",
-            "",
-            "ro.oplus.image.my_product.type=all",
-            "ro.product.my_product.brand=samsung",
-            "ro.product.my_product.device=dm1q",
-            "ro.product.my_product.model=SM-S911B",
-            "ro.product.my_product.name=dm1q",
-            "ro.product.my_product.manufacturer=Samsung",
-            "",
-        ]
+        for part in ["my_product", "my_manifest"]:
+            part_dir = target_dir / part
+            if not part_dir.exists():
+                continue
 
-        build_prop = my_product_dir / "build.prop"
-        build_prop.write_text("\n".join(stub_props), encoding="utf-8")
-        logger.info(f"  Criado: {build_prop}")
+            fs_cfg = config_dir / f"{part}_fs_config"
+            fc_cfg = config_dir / f"{part}_file_contexts"
+
+            if not fs_cfg.exists():
+                lines = [f"{part} 0 2000 0755"]
+                for fp in sorted(part_dir.rglob("*")):
+                    rel = str(fp.relative_to(part_dir)).replace("\", "/")
+                    mode = "0755" if fp.is_dir() else "0644"
+                    lines.append(f"{part}/{rel} 0 {'2000' if fp.is_dir() else '0'} {mode}")
+                fs_cfg.write_text("
+".join(lines) + "
+", encoding="utf-8")
+                logger.info(f"  Gerado: {fs_cfg.name} ({len(lines)} entradas)")
+
+            if not fc_cfg.exists():
+                fc_lines = [
+                    f"/{part}(/.*)? u:object_r:system_file:s0",
+                    f"/{part}/build\.prop u:object_r:system_prop_file:s0",
+                    f"/{part}/etc(/.*)? u:object_r:system_file:s0",
+                ]
+                fc_cfg.write_text("
+".join(fc_lines) + "
+", encoding="utf-8")
+                logger.info(f"  Gerado: {fc_cfg.name}")
 
         return True
+
 
     def _fix_incompatible_props(self, target_dir: Path) -> bool:
         """
@@ -305,3 +335,131 @@ class Dm1qAospCompatModule(BaseModule):
             logger.warning(f"  Erro ao configurar Play Integrity: {e}")
 
         return True
+
+    def _fix_fingerprint_dm1q(self, target_dir: Path) -> bool:
+        """
+        Regenera fingerprint com valores corretos do S23.
+        FIX: considera path aninhado system/system/build.prop (Evolution X).
+        """
+        logger.info("Regenerando fingerprint dm1q...")
+
+        def find_root(part: str) -> Path | None:
+            nested = target_dir / part / part
+            if nested.exists():
+                return nested
+            direct = target_dir / part
+            if direct.exists():
+                return direct
+            return None
+
+        def read_prop(root: Path | None, key: str, fallback: str = "") -> str:
+            if not root:
+                return fallback
+            for bp in root.rglob("build.prop"):
+                try:
+                    for line in bp.read_text(encoding="utf-8", errors="ignore").splitlines():
+                        s = line.strip()
+                        if s.startswith(f"{key}="):
+                            return s.split("=", 1)[1]
+                except Exception:
+                    pass
+            return fallback
+
+        vendor = find_root("vendor")
+        system = find_root("system")
+
+        brand       = read_prop(vendor, "ro.product.vendor.brand",      "samsung")
+        name        = read_prop(vendor, "ro.product.vendor.name",       "dm1q")
+        device      = read_prop(vendor, "ro.product.vendor.device",     "dm1q")
+        version     = read_prop(system, "ro.build.version.release",     "15")
+        build_id    = read_prop(system, "ro.build.id",                  "AP3A")
+        incremental = read_prop(system, "ro.build.version.incremental", "eng")
+        build_type  = read_prop(system, "ro.build.type",                "user")
+        tags        = read_prop(system, "ro.build.tags",                "release-keys")
+
+        fp  = f"{brand}/{name}/{device}:{version}/{build_id}/{incremental}:{build_type}/{tags}"
+        desc = f"{name}-{build_type} {version} {build_id} {incremental} {tags}"
+        logger.info(f"  Fingerprint: {fp}")
+
+        repl = {
+            "ro.build.fingerprint":            fp,
+            "ro.bootimage.build.fingerprint":  fp,
+            "ro.system.build.fingerprint":     fp,
+            "ro.product.build.fingerprint":    fp,
+            "ro.system_ext.build.fingerprint": fp,
+            "ro.vendor.build.fingerprint":     fp,
+            "ro.odm.build.fingerprint":        fp,
+            "ro.build.description":            desc,
+            "ro.system.build.description":     desc,
+        }
+
+        modified = 0
+        for part in ["system", "system_ext", "product", "vendor", "odm", "my_product"]:
+            root = find_root(part)
+            if not root:
+                continue
+            for bp in root.rglob("build.prop"):
+                try:
+                    lines = bp.read_text(encoding="utf-8", errors="ignore").splitlines()
+                    new_lines, changed = [], False
+                    for line in lines:
+                        key = line.split("=", 1)[0].strip()
+                        if key in repl and line.strip() != f"{key}={repl[key]}":
+                            new_lines.append(f"{key}={repl[key]}")
+                            changed = True
+                        else:
+                            new_lines.append(line)
+                    if changed:
+                        bp.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+                        modified += 1
+                except Exception as e:
+                    logger.warning(f"  Erro em {bp}: {e}")
+
+        logger.info(f"  Fingerprint corrigido em {modified} arquivos.")
+        return True
+
+    def _configure_play_integrity_v2(self, target_dir: Path) -> bool:
+        """Play Integrity com path aninhado correto."""
+        logger.info("Configurando Play Integrity (S23)...")
+
+        # Busca build.prop em system, considerando path aninhado
+        system_bp = None
+        for candidate in [
+            target_dir / "system" / "system" / "build.prop",
+            target_dir / "system" / "build.prop",
+        ]:
+            if candidate.exists():
+                system_bp = candidate
+                break
+
+        if not system_bp:
+            # Tenta rglob como fallback
+            results = list((target_dir / "system").rglob("build.prop"))
+            if results:
+                system_bp = results[0]
+
+        if not system_bp:
+            logger.warning("  system/build.prop não encontrado.")
+            return True
+
+        content = system_bp.read_text(encoding="utf-8", errors="ignore")
+        play_props = {
+            "ro.secure": "1",
+            "ro.debuggable": "0",
+            "ro.boot.selinux": "enforcing",
+        }
+        added = []
+        import re as _re
+        for key, value in play_props.items():
+            if not _re.search(rf"^{_re.escape(key)}=", content, _re.MULTILINE):
+                content += f"\n{key}={value}"
+                added.append(f"{key}={value}")
+        if added:
+            system_bp.write_text(content, encoding="utf-8")
+            for p in added:
+                logger.info(f"  Adicionado: {p}")
+        else:
+            logger.info("  Props já presentes.")
+        return True
+
+

@@ -130,6 +130,20 @@ class Repacker:
 
         self.logger.info(f"Packing [{part_name}] as {pack_type}...")
 
+        # FIX-dm1q: partições oplus sem fs_config causam erro no mkfs.erofs
+        _OPLUS_STUBS = [
+            "my_product", "my_manifest", "my_engineering", "my_company",
+            "my_carrier", "my_region", "my_heytap", "my_stock",
+            "my_preload", "my_bigball",
+        ]
+        if part_name in _OPLUS_STUBS and (
+            not fs_config.exists() or not file_contexts.exists()
+        ):
+            self.logger.warning(
+                f"[dm1q] Pulando {part_name}: sem fs_config/file_contexts."
+            )
+            return
+
         self._run_patch_tools(src_dir, fs_config, file_contexts)
 
         if pack_type == "EXT":

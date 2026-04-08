@@ -793,6 +793,31 @@ class RomPackage:
         """Whether this is ColorOS (China)"""
         return not (self.is_coloros_global or self.is_oos or self.is_realme_ui)
 
+    @property
+    def is_aosp_based(self) -> bool:
+        """Detecta ROMs AOSP puras (Evolution X, LineageOS, etc.) sem camada Oplus."""
+        has_oplus_area  = bool(self.get_prop("ro.oplus.image.system_ext.area"))
+        has_oplus_rom   = bool(self.get_prop("ro.build.version.oplusrom"))
+        has_oplus_brand = bool(self.get_prop("ro.oplus.image.system_ext.brand"))
+        return not (has_oplus_area or has_oplus_rom or has_oplus_brand)
+
+    @property
+    def is_evolution_x(self) -> bool:
+        """Detecta Evolution X especificamente."""
+        display_id = self.get_prop("ro.build.display.id") or ""
+        evo_prop   = self.get_prop("ro.evolution.device") or ""
+        evo_prop2  = self.get_prop("org.evolution.device") or ""
+        return "EvolutionX" in display_id or bool(evo_prop) or bool(evo_prop2)
+
+    @property
+    def is_samsung_device(self) -> bool:
+        """Detecta dispositivo Samsung."""
+        brand = (self.vendor_brand or "").lower()
+        model = (self.product_model or "").upper()
+        return brand == "samsung" or model.startswith("SM-")
+
+
+
     def scan_apks(self) -> dict:
         """
         Scan all APK files in extracted directory and extract metadata.
@@ -941,6 +966,18 @@ class RomPackage:
             logger.debug(f"Failed to read metadata from ZIP: {e}")
 
         filename = Path(rom_path).name
+
+        # Samsung Galaxy S23 series
+        samsung_patterns = {
+            "SM-S911": "dm1q", "SM_S911": "dm1q", "S911B": "dm1q",
+            "SM-S916": "dm2q", "SM_S916": "dm2q", "S916B": "dm2q",
+            "SM-S918": "dm3q", "SM_S918": "dm3q", "S918B": "dm3q",
+        }
+        for pattern, code in samsung_patterns.items():
+            if pattern in filename:
+                logger.info(f"Device code Samsung do filename: {code}")
+                return code
+
         match = re.search(r"ColorOS_([^_]+)_", filename)
         if match:
             code = match.group(1)

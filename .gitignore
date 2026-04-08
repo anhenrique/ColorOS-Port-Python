@@ -39,6 +39,15 @@ tmp/
 temp_*/
 dm1q_patch/
 *:Zone.Identifier*
+*.tar.md5
+META-INF/
+base_limpa/
+*.list
+*.bak3
+wget-log*
+roms/
+
+
 
 # Editor specific
 .idea/
