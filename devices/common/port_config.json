@@ -2,17 +2,7 @@
     "partition_to_port": [
         "system",
         "system_ext",
-        "product",
-        "my_product",
-        "my_engineering",
-        "my_company",
-        "my_carrier",
-        "my_region",
-        "my_heytap",
-        "my_stock",
-        "my_preload",
-        "my_bigball",
-        "my_manifest"
+        "product"
     ],
     "possible_super_list": [
         "system",
@@ -21,17 +11,7 @@
         "vendor",
         "odm",
         "system_dlkm",
-        "vendor_dlkm",
-        "my_product",
-        "my_engineering",
-        "my_company",
-        "my_carrier",
-        "my_region",
-        "my_heytap",
-        "my_stock",
-        "my_preload",
-        "my_bigball",
-        "my_manifest"
+        "vendor_dlkm"
     ],
     "repack_with_ext4": true,
     "super_extended": false,

@@ -119,6 +119,8 @@ class PropertyModifier:
         Reconstructs my_product/build.prop by using baserom as base
         and moving portrom-specific props to etc/bruce/build.prop.
         """
+        # FIX-samsung: pula my_product se nao existir no target
+        # Samsung/Evolution X usa apenas 'product', nao 'my_product'
         target_my_product = self.target_dir / "my_product"
         if not target_my_product.exists():
             return
