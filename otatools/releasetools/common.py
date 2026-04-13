@@ -2262,7 +2262,10 @@ def GetNonSparseImage(which, tmpdir):
 
   # The image and map files must have been created prior to calling
   # ota_from_target_files.py (since LMP).
-  assert os.path.exists(path) and os.path.exists(mappath)
+  # EROFS_PATCH_V2: não faz assert em mappath para EROFS
+  assert os.path.exists(path)
+  if not os.path.exists(mappath):
+    mappath = None  # EROFS: sem map sparse
 
   return images.FileImage(path)
 
@@ -2295,8 +2298,37 @@ def GetSparseImage(which, tmpdir, input_zip, allow_shared_blocks):
   # unconditionally. Note that they are still part of care_map. (Bug: 20939131)
   clobbered_blocks = "0"
 
-  image = sparse_img.SparseImage(
-      path, mappath, clobbered_blocks, allow_shared_blocks=allow_shared_blocks)
+  # EROFS_PATCH_V2: fallback para EROFS
+  if mappath is None or not os.path.exists(mappath):
+    # EROFS ou imagem sem map — retorna imagem bruta
+    class _RawImage:
+      """Minimal image object for non-sparse images (EROFS)."""
+      def __init__(self, path):
+        self.path = path
+        self.size = os.path.getsize(path)
+        self.blocksize = 4096
+        self.total_blocks = (self.size + self.blocksize - 1) // self.blocksize
+        self.care_map = RangeSet(['0-{}'.format(self.total_blocks - 1)])
+        self.clobbered_blocks = RangeSet()
+        self.extended = RangeSet()
+      def TotalSha256(self, include_clobbered_blocks=False):
+        import hashlib
+        h = hashlib.sha256()
+        with open(self.path, 'rb') as f:
+          while True:
+            chunk = f.read(1 << 20)
+            if not chunk: break
+            h.update(chunk)
+        return h.hexdigest()
+      def WriteRangeDataToFd(self, ranges, fd):
+        with open(self.path, 'rb') as f:
+          for s, e in ranges:
+            f.seek(s * self.blocksize)
+            fd.write(f.read((e - s) * self.blocksize))
+    image = _RawImage(path)
+  else:
+    image = sparse_img.SparseImage(
+        path, mappath, clobbered_blocks, allow_shared_blocks=allow_shared_blocks)
 
   # block.map may contain less blocks, because mke2fs may skip allocating blocks
   # if they contain all zeros. We can't reconstruct such a file from its block

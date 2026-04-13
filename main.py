@@ -10,6 +10,7 @@ from src.core.props import PropertyModifier
 from src.core.modifiers.unified_modifier import UnifiedModifier
 from src.core.modifiers.framework_modifier import FrameworkModifier
 from src.core.modifiers.firmware_modifier import FirmwareModifier
+from src.modules.bt_patcher import apply_bt_patch
 from src.core.packer import Repacker
 from src.core.workflow import PortingWorkflow
 from src.utils.logging_config import setup_logging
@@ -101,6 +102,10 @@ def main():
             logger.info("Starting Stage 3: System Modification...")
             unified = UnifiedModifier(ctx)
             unified.run()
+            if args.device_code == "dm1q":
+                # Executa o patch específico para o Bluetooth do S23
+                # Isso deve ocorrer ANTES do Stage 4 (Repacking)
+                apply_bt_patch(ctx)
 
         with timed_stage("Stage 3.5: Framework Smali Patching"):
             logger.info("Starting Stage 3.5: Framework Smali Patching...")

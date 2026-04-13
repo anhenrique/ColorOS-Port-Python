@@ -31,6 +31,13 @@ venv.bak/
 out/
 devices/**/*.img
 devices/**/*.apk
+devices/**/*.mbn
+devices/**/*.elf
+devices/**/*.so
+devices/**/*.bin  
+devices/chipset/SM8350/*  
+devices/chipset/SM8450/assets/
+
 !devices/**/override/**
 *.log
 *.img
