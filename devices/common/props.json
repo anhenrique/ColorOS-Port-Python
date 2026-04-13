@@ -78,12 +78,10 @@
     }
   ],
   "my_product": {
-    "force_keys": [
-      "ro.build.version.oplusrom",
-      "ro.build.version.oplusrom.display",
-      "ro.build.version.oplusrom.confidential",
-      "ro.build.version.realmeui"
-    ],
-    "import_line": "import /mnt/vendor/my_product/etc/bruce/build.prop"
-  }
+  "key": "ro.sf.lcd_density",
+  "source": "base_lcd_density",
+  "target_partition": "product" 
+}
+
+  
 }

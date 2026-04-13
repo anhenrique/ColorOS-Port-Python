@@ -1,0 +1,14 @@
+{
+  "replacements": [
+    {
+      "id": "merge_my_product_to_product",
+      "description": "Portando conteúdo de my_product para a partição product da Samsung",
+      "type": "unzip_override",
+      "source": "devices/target/dm1q/my_product.zip",
+      "target_base_dir": "build/target/product/",
+      "condition": {
+        "port_android_version": { "min": 16, "max": 16 }
+      }
+    }
+  ]
+}
