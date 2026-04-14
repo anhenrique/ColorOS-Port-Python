@@ -1,7 +1,7 @@
 #!/bin/bash
 # Script para automatizar a extração e compressão da partição my_product
 
-IMG_FILE="build/target/my_product.img"
+IMG_FILE="./my_product.img"
 TEMP_DIR="./temp_my_product"
 TARGET_DIR="devices/target/dm1q"
 BIN_PATH="./bin/linux/x86_64" # Caminho das ferramentas do ColorOS-Port-Python [3]

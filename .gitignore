@@ -53,9 +53,7 @@ base_limpa/
 *.bak3
 wget-log*
 roms/
-
-
-
+build_s23/*
 *.bak*
 
 # Editor specific

@@ -3,9 +3,9 @@
   "rules": [
     {
       "name": "prop_set",
-      "priority": 20,
+      "priority": 5,
       "enabled": true,
-      "description": "Ajuste de alvos de partição para Base Samsung",
+      "description": "Redirecionamento total para evitar erro de diretório inexistente",
       "config": {
         "properties": [
           {
@@ -16,6 +16,11 @@
           {
             "key": "ro.product.first_api_level",
             "value": "33",
+            "target_partition": "product"
+          },
+          {
+            "key": "ro.vendor.oplus.market.name",
+            "value": "Samsung Galaxy S23",
             "target_partition": "product"
           }
         ]
