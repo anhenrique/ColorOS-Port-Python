@@ -37,6 +37,7 @@ devices/**/*.so
 devices/**/*.bin  
 devices/chipset/SM8350/*  
 devices/chipset/SM8450/assets/
+devices/target/dm1q/patch/*
 
 !devices/**/override/**
 *.log
@@ -68,3 +69,4 @@ build_s23/*
 output/
 porting.log
 *.zip
+ *.tar.gz

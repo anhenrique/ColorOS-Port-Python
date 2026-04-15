@@ -103,19 +103,38 @@ def setup_logging(debug: bool = False) -> logging.Logger:
 # UTILITÁRIOS
 # ──────────────────────────────────────────────────────────────────────────────
 
-def run_cmd(cmd: list[str], logger: logging.Logger, check: bool = True) -> subprocess.CompletedProcess:
+def run_cmd(cmd: list[str], logger: logging.Logger, check: bool = True,
+            stream: bool = False) -> subprocess.CompletedProcess:
     logger.debug(f"CMD: {' '.join(str(c) for c in cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.stdout:
-        logger.debug(result.stdout)
-    if result.returncode != 0:
-        if check:
-            logger.error(f"Falhou: {' '.join(str(c) for c in cmd)}")
-            logger.error(result.stderr)
-            raise subprocess.CalledProcessError(result.returncode, cmd, result.stderr)
-        else:
-            logger.warning(f"Aviso: {result.stderr[:200]}")
-    return result
+    if stream:
+        # Modo streaming: exibe progresso em tempo real (para processos longos)
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, bufsize=1
+        )
+        last_line = ""
+        for line in proc.stdout:
+            line = line.rstrip()
+            if line:
+                logger.debug(line)
+                last_line = line
+        proc.wait()
+        if proc.returncode != 0 and check:
+            logger.error(f"Falhou (código {proc.returncode}): {' '.join(str(c) for c in cmd)}")
+            raise subprocess.CalledProcessError(proc.returncode, cmd, last_line)
+        return subprocess.CompletedProcess(cmd, proc.returncode)
+    else:
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.stdout:
+            logger.debug(result.stdout)
+        if result.returncode != 0:
+            if check:
+                logger.error(f"Falhou: {' '.join(str(c) for c in cmd)}")
+                logger.error(result.stderr)
+                raise subprocess.CalledProcessError(result.returncode, cmd, result.stderr)
+            else:
+                logger.warning(f"Aviso: {result.stderr[:200]}")
+        return result
 
 
 def read_prop(path: Path, key: str, fallback: str = "") -> str:
@@ -460,35 +479,128 @@ class SamsungStockExtractor:
             return self._extract_ext4(img_path, dest_dir)
 
     def _extract_ext4(self, img: Path, dest: Path) -> bool:
-        """Extrai ext4 via debugfs ou mount."""
-        self.logger.info(f"  ext4: {img.name} → {dest.name}/")
+        """
+        Extrai ext4 com debugfs via stdin pipe — método confirmado como funcional
+        em servidores sem loop devices.
 
-        # Tenta debugfs rdump (não precisa de root)
+        Fallbacks: mount loop → 7z → ext4 Python
+        """
+        self.logger.info(f"  ext4: {img.name} → {dest.name}/")
+        dest.mkdir(parents=True, exist_ok=True)
+
+        # ── Método 1: debugfs via stdin pipe (mais confiável sem root) ────────
+        # Sintaxe: echo "rdump / /dest" | debugfs image.img
+        # NOTA: o destino precisa existir antes e ser passado como path absoluto
         debugfs = shutil.which("debugfs")
         if debugfs:
-            result = subprocess.run(
-                [debugfs, "-R", f"rdump / {dest}", str(img)],
-                capture_output=True, text=True
+            # rdump exige que o destino exista previamente
+            dest.mkdir(parents=True, exist_ok=True)
+            cmd_input = f'rdump / "{dest.resolve()}"'
+            r = subprocess.run(
+                [debugfs, str(img)],
+                input=cmd_input,
+                capture_output=True,
+                text=True
             )
-            if result.returncode == 0 and any(dest.iterdir()):
+            # debugfs sempre retorna 0; checa se extraiu algo real (além de lost+found)
+            extracted = [f for f in dest.iterdir()
+                         if f.name not in ("lost+found", ".", "..")]
+            if extracted:
+                self.logger.info(f"  debugfs pipe OK: {img.name} ({len(extracted)} itens)")
                 return True
+            else:
+                self.logger.debug(f"  debugfs pipe: sem arquivos extraídos. stderr: {r.stderr[:200]}")
 
-        # Tenta mount loop (precisa de sudo)
-        result = subprocess.run(
-            ["sudo", "mount", "-t", "ext4", "-o", "loop,ro", str(img), str(dest)],
+        # ── Método 2: mount loop (funciona em host com loop devices) ──────────
+        mount_pt = dest.parent / f"{dest.name}_mnt"
+        mount_pt.mkdir(parents=True, exist_ok=True)
+        r2 = subprocess.run(
+            ["sudo", "mount", "-o", "loop,ro", str(img), str(mount_pt)],
             capture_output=True, text=True
         )
-        if result.returncode == 0:
-            self.logger.info(f"  Montado via loop. Copiando...")
-            tmp = dest.parent / f"{dest.name}_copy"
-            shutil.copytree(dest, tmp, symlinks=True)
-            subprocess.run(["sudo", "umount", str(dest)])
-            dest.rmdir()
-            tmp.rename(dest)
-            return True
+        if r2.returncode == 0:
+            self.logger.info(f"  mount loop OK: {img.name}")
+            rsync = shutil.which("rsync")
+            ok = False
+            try:
+                if rsync:
+                    r3 = subprocess.run(
+                        [rsync, "-a", "--no-owner", "--no-group",
+                         str(mount_pt) + "/", str(dest) + "/"],
+                        capture_output=True, text=True
+                    )
+                    ok = r3.returncode == 0
+                if not ok:
+                    shutil.copytree(str(mount_pt), str(dest),
+                                    symlinks=True, dirs_exist_ok=True)
+                    ok = True
+            finally:
+                subprocess.run(["sudo", "umount", str(mount_pt)], capture_output=True)
+                try:
+                    mount_pt.rmdir()
+                except Exception:
+                    pass
+            if ok:
+                return True
+        else:
+            self.logger.debug(f"  mount falhou: {r2.stderr.strip()[:120]}")
+            try:
+                mount_pt.rmdir()
+            except Exception:
+                pass
 
-        self.logger.warning(f"  Não foi possível extrair {img.name}. Tente: sudo apt install e2fsprogs")
+        # ── Método 3: 7z ─────────────────────────────────────────────────────
+        for sevenzip in ["7z", "7za", "7zr"]:
+            bin7z = shutil.which(sevenzip)
+            if bin7z:
+                self.logger.info(f"  Tentando {sevenzip}...")
+                r4 = subprocess.run(
+                    [bin7z, "x", str(img), f"-o{dest}", "-y"],
+                    capture_output=True, text=True
+                )
+                if r4.returncode == 0 and any(dest.iterdir()):
+                    return True
+                break
+
+        # ── Método 4: ext4 Python puro ────────────────────────────────────────
+        try:
+            import importlib
+            ext4_mod = importlib.import_module("ext4")
+            self.logger.info(f"  Tentando ext4 Python...")
+            with open(img, "rb") as f_img:
+                vol = ext4_mod.Volume(f_img)
+                self._ext4_extract_dir(vol.root, dest)
+            if any(dest.iterdir()):
+                return True
+        except ImportError:
+            pass
+        except Exception as e:
+            self.logger.debug(f"  ext4 Python falhou: {e}")
+
+        self.logger.error(
+            f"  FALHA ao extrair {img.name}!\n"
+            f"  Este servidor nao tem loop devices. Instale:\n"
+            f"    pip install ext4       # extração Python pura, sem root\n"
+            f"    sudo apt install p7zip-full  # alternativa\n"
+            f"  Ou use Docker com --privileged para mount loop funcionar."
+        )
         return False
+
+    def _ext4_extract_dir(self, inode, dest: Path):
+        """Extrai recursivamente um diretório de um volume ext4 Python."""
+        dest.mkdir(parents=True, exist_ok=True)
+        for name, child_inode, _ in inode.open_dir():
+            if name in (b".", b".."):
+                continue
+            fname = name.decode("utf-8", errors="replace")
+            child_path = dest / fname
+            if child_inode.is_dir:
+                self._ext4_extract_dir(child_inode, child_path)
+            else:
+                try:
+                    child_path.write_bytes(child_inode.open_read().read())
+                except Exception:
+                    pass
 
     def _extract_erofs(self, img: Path, dest: Path) -> bool:
         """Extrai EROFS via fsck.erofs ou erofsfuse."""
@@ -631,20 +743,9 @@ class SamsungStockExtractor:
                     with zf.open("payload.bin") as src, open(payload_path, "wb") as dst:
                         shutil.copyfileobj(src, dst, length=16 * 1024 * 1024)
 
-        # Extrai com payload-dumper-go
+        # Extrai com _extract_payload (tenta múltiplos métodos)
         imgs_dir = self.build_dir / "base_imgs"
-        imgs_dir.mkdir(exist_ok=True)
-
-        for tool in ["payload-dumper-go", "payload_dumper"]:
-            if shutil.which(tool):
-                self.logger.info(f"  Extraindo payload com {tool}...")
-                run_cmd([tool, "-o", str(imgs_dir), str(work / "payload.bin")], self.logger)
-                break
-        else:
-            raise RuntimeError(
-                "payload-dumper-go não encontrado!\n"
-                "  Download: https://github.com/ssut/payload-dumper-go/releases"
-            )
+        self._extract_payload(work / "payload.bin", imgs_dir)
 
         # Extrai imagens
         base_dir.mkdir(exist_ok=True)
@@ -657,7 +758,87 @@ class SamsungStockExtractor:
 
         return base_dir
 
-    # ── Pipeline port ROM (ColorOS) ──────────────────────────────────────────
+    def _extract_payload(self, payload_path: Path, imgs_dir: Path):
+        """
+        Extrai payload.bin usando payload-dumper-go, ota_extractor,
+        ou tenta instalar o payload-dumper automaticamente.
+        """
+        imgs_dir.mkdir(exist_ok=True)
+
+        # 1. payload-dumper-go (Go binary, mais rápido)
+        for tool in ["payload-dumper-go"]:
+            if shutil.which(tool):
+                self.logger.info(f"  Usando {tool} (isso pode demorar vários minutos)...")
+                run_cmd([tool, "-o", str(imgs_dir), str(payload_path)],
+                        self.logger, stream=True)
+                return
+
+        # 2. ota_extractor do otatools incluso no repo
+        for candidate in [
+            Path("otatools/bin/ota_extractor"),
+            Path("otatools/bin/delta_generator"),
+            self._bin / "ota_extractor",
+        ]:
+            if candidate.exists():
+                self.logger.info(f"  Usando {candidate.name}...")
+                candidate.chmod(0o755)
+                run_cmd([str(candidate), "--payload", str(payload_path),
+                         "--output_dir", str(imgs_dir)], self.logger)
+                return
+
+        # 3. Python payload_dumper (pip)
+        try:
+            import payload_dumper  # noqa
+            self.logger.info("  Usando payload_dumper Python...")
+            # Chama como subprocess para não poluir o processo atual
+            result = subprocess.run(
+                [sys.executable, "-m", "payload_dumper",
+                 "--out", str(imgs_dir), str(payload_path)],
+                capture_output=True, text=True
+            )
+            if result.returncode == 0:
+                return
+        except ImportError:
+            pass
+
+        # 4. Tenta instalar payload-dumper-go automaticamente
+        self.logger.info("  payload-dumper-go não encontrado. Tentando instalar...")
+        import platform, urllib.request, tarfile as _tarfile
+        arch = platform.machine()
+        arch_map = {"x86_64": "amd64", "aarch64": "arm64"}
+        go_arch = arch_map.get(arch, "amd64")
+        url = (
+            f"https://github.com/ssut/payload-dumper-go/releases/latest/download/"
+            f"payload-dumper-go_linux_{go_arch}.tar.gz"
+        )
+        try:
+            tgz = self.build_dir / "payload-dumper-go.tar.gz"
+            self.logger.info(f"  Baixando {url}...")
+            urllib.request.urlretrieve(url, tgz)
+            with _tarfile.open(tgz) as tf:
+                for member in tf.getmembers():
+                    if member.name.endswith("payload-dumper-go"):
+                        member.name = "payload-dumper-go"
+                        tf.extract(member, path=self._bin)
+                        (self._bin / "payload-dumper-go").chmod(0o755)
+                        break
+            tgz.unlink(missing_ok=True)
+            self.logger.info("  payload-dumper-go instalado em bin/linux/x86_64/")
+            run_cmd([str(self._bin / "payload-dumper-go"),
+                     "-o", str(imgs_dir), str(payload_path)], self.logger)
+            return
+        except Exception as e:
+            self.logger.warning(f"  Download falhou: {e}")
+
+        raise RuntimeError(
+            "Nenhum extrator de payload.bin encontrado!\n"
+            "  Instale manualmente:\n"
+            "    wget https://github.com/ssut/payload-dumper-go/releases/latest/download/payload-dumper-go_linux_amd64.tar.gz\n"
+            "    tar xzf payload-dumper-go_linux_amd64.tar.gz\n"
+            "    sudo mv payload-dumper-go /usr/local/bin/\n"
+            "  Ou via pip:\n"
+            "    pip install payload-dumper"
+        )
 
     def prepare_port(self, port_input: Path) -> Path:
         """Extrai e prepara a Port ROM (ColorOS)."""
@@ -690,12 +871,7 @@ class SamsungStockExtractor:
                             shutil.copyfileobj(src, dst, length=16 * 1024 * 1024)
 
                 imgs_dir.mkdir(exist_ok=True)
-                for tool in ["payload-dumper-go", "payload_dumper"]:
-                    if shutil.which(tool):
-                        run_cmd([tool, "-o", str(imgs_dir), str(payload_path)], self.logger)
-                        break
-                else:
-                    raise RuntimeError("payload-dumper-go não encontrado para extrair o port!")
+                self._extract_payload(payload_path, imgs_dir)
 
             # Pode também ter super.img
             elif any("super.img" in n for n in names):
@@ -779,25 +955,30 @@ class RomMerger:
         self.logger.info("\n[STAGE 2] Merge das partições...")
         self.target_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1. Copia partições reais da BASE (kernel, drivers, HALs)
+        # 1. Copia partições reais da BASE (kernel, drivers, HALs do Samsung)
         for part in REAL_PARTITIONS:
             src = self.base_dir / part
             if src.exists():
                 self._copy_partition(src, self.target_dir / part)
 
         # 2. Copia partições oplus do PORT (interface ColorOS)
+        #    Filtra diretórios _mnt que são artefatos temporários de mount
         for part in OPLUS_STUB_PARTITIONS:
             src = self.port_dir / part
+            # Ignora diretórios com sufixo _mnt (artefatos de mount loop)
+            if part.endswith("_mnt"):
+                continue
             if src.exists():
                 self._copy_partition(src, self.target_dir / part)
             else:
-                self.logger.debug(f"  Partição oplus ausente no port: {part}")
+                self.logger.debug(f"  Particao oplus ausente no port: {part}")
 
-        # 3. Overlay seletivo: alguns arquivos do system/product do ColorOS
-        #    são preferíveis (ex: apps, overlays visuais)
+        # 3. Overlay seletivo de apps ColorOS
         self._apply_coloros_overlay()
 
-        self.logger.info(f"  Merge completo: {len(list(self.target_dir.iterdir()))} partições")
+        # Conta só partições válidas (sem _mnt)
+        valid = [p for p in self.target_dir.iterdir() if not p.name.endswith("_mnt")]
+        self.logger.info(f"  Merge completo: {len(valid)} particoes")
         return self.target_dir
 
     def _apply_coloros_overlay(self):
@@ -872,27 +1053,67 @@ class S23Patcher:
         return True
 
     def _generate_fs_config(self, part_dir: Path, part_name: str, config_dir: Path):
-        """Gera fs_config e file_contexts para uma partição."""
+        """
+        Gera fs_config e file_contexts para partições oplus (my_*).
+
+        Formato exato esperado pelo mkfs.erofs incluso no bin/:
+            <path> <uid> <gid> <mode>
+        Exemplos válidos:
+            my_product 0 2000 0755
+            my_product/build.prop 0 0 0644
+            my_product/etc 0 2000 0755
+
+        Cuidados:
+        - Nunca gerar path vazio ou "." — causa "failed to find  in canned fs_config"
+        - Ignorar symlinks quebrados
+        - Ignorar a própria raiz do rglob (relative_to retorna PosixPath('.'))
+        """
         fs_cfg = config_dir / f"{part_name}_fs_config"
         fc_cfg = config_dir / f"{part_name}_file_contexts"
 
-        if not fs_cfg.exists():
-            lines = [f"{part_name} 0 2000 0755"]
-            for fp in sorted(part_dir.rglob("*")):
-                rel = str(fp.relative_to(part_dir)).replace("\\", "/")
-                if fp.is_dir():
-                    lines.append(f"{part_name}/{rel} 0 2000 0755")
-                else:
-                    lines.append(f"{part_name}/{rel} 0 0 0644")
-            fs_cfg.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        # Regenera sempre (pode ter sido gerado incorretamente antes)
+        if fs_cfg.exists():
+            fs_cfg.unlink()
+        if fc_cfg.exists():
+            fc_cfg.unlink()
 
-        if not fc_cfg.exists():
-            fc_lines = [
-                f"/{part_name}(/.*)? u:object_r:system_file:s0",
-                f"/{part_name}/build\\.prop u:object_r:system_prop_file:s0",
-                f"/{part_name}/etc(/.*)? u:object_r:system_file:s0",
-            ]
-            fc_cfg.write_text("\n".join(fc_lines) + "\n", encoding="utf-8")
+        lines = []
+        # Entrada da raiz da partição
+        lines.append(f"{part_name} 0 2000 0755")
+
+        for fp in sorted(part_dir.rglob("*")):
+            # Ignora symlinks quebrados
+            if fp.is_symlink() and not fp.exists():
+                continue
+
+            try:
+                rel = fp.relative_to(part_dir)
+            except ValueError:
+                continue
+
+            # Ignora a raiz (relative_to retorna PosixPath('.'))
+            rel_str = str(rel)
+            if rel_str in (".", ""):
+                continue
+
+            # Normaliza separadores
+            rel_str = rel_str.replace("\\", "/")
+
+            if fp.is_dir():
+                lines.append(f"{part_name}/{rel_str} 0 2000 0755")
+            else:
+                lines.append(f"{part_name}/{rel_str} 0 0 0644")
+
+        fs_cfg.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self.logger.debug(f"    fs_config: {fs_cfg.name} ({len(lines)} entradas)")
+
+        # file_contexts mínimo para SELinux
+        fc_lines = [
+            f"/{part_name}(/.*)?             u:object_r:system_file:s0",
+            f"/{part_name}/build\\.prop      u:object_r:system_prop_file:s0",
+            f"/{part_name}/etc(/.*)?         u:object_r:system_file:s0",
+        ]
+        fc_cfg.write_text("\n".join(fc_lines) + "\n", encoding="utf-8")
 
     # ── 3.2: Substituição de strings (device code) ──────────────────────────
 
@@ -1135,73 +1356,153 @@ class RomPacker:
         raise FileNotFoundError(f"Ferramenta não encontrada: {name}")
 
     def pack_partition_erofs(self, part_name: str, part_dir: Path) -> Optional[Path]:
-        """Empacota uma partição como EROFS."""
-        output_img = self.output_dir / f"{part_name}.img"
-        fs_config = self.config_dir / f"{part_name}_fs_config"
-        file_contexts = self.config_dir / f"{part_name}_file_contexts"
+        """
+        Empacota uma partição como EROFS.
 
-        # Partições oplus sem fs_config — pula
+        Regras:
+        - Partições reais (system/vendor/etc): SEM --fs-config-file nem --file-contexts.
+          O mkfs.erofs do bin/ incluso falha com fs_config externo nessas partições grandes.
+        - Partições oplus (my_*): COM fs_config gerado pelo S23Patcher, mas APENAS
+          se o arquivo fs_config não tiver entradas inválidas.
+        - Imagens de 0 bytes de rodadas anteriores são apagadas e recriadas.
+        """
+        output_img = self.output_dir / f"{part_name}.img"
+
+        # Apaga imagem vazia de rodada anterior falha
+        if output_img.exists():
+            if output_img.stat().st_size > 0:
+                self.logger.info(f"  EROFS: {part_name}.img ja existe "
+                                 f"({output_img.stat().st_size // 1024 // 1024} MB)")
+                return output_img
+            else:
+                self.logger.warning(f"  {part_name}.img esta vazia (rodada anterior falhou) — apagando.")
+                output_img.unlink()
+
+        # Verifica se a partição tem conteúdo real
+        if not part_dir.exists():
+            self.logger.warning(f"  Skip {part_name}: diretorio nao existe")
+            return None
+        try:
+            first = next(part_dir.iterdir())  # noqa — só verifica se há algo
+        except StopIteration:
+            self.logger.warning(f"  Skip {part_name}: diretorio vazio")
+            return None
+
+        # Partições oplus sem fs_config gerado — não inclui no super
+        fs_config     = self.config_dir / f"{part_name}_fs_config"
+        file_contexts = self.config_dir / f"{part_name}_file_contexts"
         if part_name in OPLUS_STUB_PARTITIONS:
             if not fs_config.exists() or not file_contexts.exists():
-                self.logger.warning(f"  [packer] Skip {part_name}: sem fs_config/file_contexts")
+                self.logger.warning(f"  Skip {part_name}: sem fs_config gerado")
                 return None
 
         try:
             mkfs_erofs = self._get_tool("mkfs.erofs")
         except FileNotFoundError:
-            self.logger.error("mkfs.erofs não encontrado! Instale erofs-utils.")
+            self.logger.error("mkfs.erofs nao encontrado! Instale erofs-utils.")
             return None
 
         cmd = [mkfs_erofs]
-        if fs_config.exists():
+
+        # fs_config/file_contexts APENAS para partições oplus
+        # (partições reais do Samsung não precisam e o mkfs.erofs falha com elas)
+        if part_name in OPLUS_STUB_PARTITIONS:
             cmd += ["--fs-config-file", str(fs_config)]
-        if file_contexts.exists():
-            cmd += ["--file-contexts", str(file_contexts)]
+            cmd += ["--file-contexts",  str(file_contexts)]
+
         cmd += [str(output_img), str(part_dir)]
 
         try:
             run_cmd(cmd, self.logger)
-            self.logger.info(f"  EROFS: {part_name}.img ({output_img.stat().st_size // 1024 // 1024} MB)")
+            size_mb = output_img.stat().st_size // 1024 // 1024
+            if output_img.stat().st_size == 0:
+                self.logger.error(f"  mkfs.erofs produziu imagem vazia para {part_name}!")
+                output_img.unlink()
+                return None
+            self.logger.info(f"  EROFS: {part_name}.img ({size_mb} MB)")
             return output_img
-        except subprocess.CalledProcessError:
-            self.logger.error(f"  Falha ao empacotar {part_name} como EROFS")
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr.strip() if e.stderr else "(sem mensagem)"
+            self.logger.error(f"  Falha ao empacotar {part_name}: {stderr[:300]}")
+            # Limpa arquivo parcial
+            output_img.unlink(missing_ok=True)
             return None
 
+    def _align_size(self, size: int, block: int = 512) -> int:
+        """Alinha tamanho para múltiplo de block bytes (requerido pelo lpmake)."""
+        return ((size + block - 1) // block) * block
+
     def pack_super(self, partition_imgs: list[Path]) -> Optional[Path]:
-        """Monta super.img a partir das imagens de partição."""
+        """
+        Monta super.img a partir das imagens de partição.
+        Filtra imagens de tamanho 0 (partições que falharam na extração)
+        e alinha tamanhos para múltiplos de 512 bytes (obrigatório pelo lpmake).
+        """
         super_img = self.output_dir / "super.img"
         super_size = self.cfg["super_size"]
 
         try:
             lpmake = self._get_tool("lpmake")
         except FileNotFoundError:
-            self.logger.error("lpmake não encontrado!")
+            self.logger.error("lpmake nao encontrado!")
             return None
+
+        # Filtra imagens vazias — lpmake recusa size=0 com --image associado
+        valid_imgs = [img for img in partition_imgs if img.stat().st_size > 0]
+        skipped    = [img.stem for img in partition_imgs if img.stat().st_size == 0]
+        if skipped:
+            self.logger.warning(f"  Ignorando imagens vazias (extracao falhou): {skipped}")
+            self.logger.warning("  ATENCAO: ROM incompleta — partições vão estar vazias no dispositivo!")
+        if not valid_imgs:
+            self.logger.error("  Nenhuma imagem valida para montar o super.img!")
+            return None
+
+        total = sum(img.stat().st_size for img in valid_imgs)
+        self.logger.info(f"  Partições validas: {len(valid_imgs)} | "
+                         f"Total: {total // 1024 // 1024} MB / {super_size // 1024 // 1024} MB")
+
+        if total > super_size:
+            self.logger.error(
+                f"  ERRO: {total // 1024 // 1024} MB excede super size "
+                f"({super_size // 1024 // 1024} MB)!"
+            )
+            return None
+
+        group_a = "qti_dynamic_partitions_a"
+        group_b = "qti_dynamic_partitions_b"
 
         cmd = [
             lpmake,
             "--metadata-size", "65536",
-            "--super-name", "super",
+            "--super-name",    "super",
             "--metadata-slots", "2",
-            "--device", f"super:{super_size}",
-            "--group", "qti_dynamic_partitions_a:0",
-            "--group", "qti_dynamic_partitions_b:0",
+            "--device",        f"super:{super_size}",
+            "--group",         f"{group_a}:{super_size}",
+            "--group",         f"{group_b}:0",
         ]
 
-        for img in partition_imgs:
-            part_name = img.stem
-            group = "qti_dynamic_partitions_a"
+        for img in valid_imgs:
+            part_name    = img.stem
+            # Tamanho alinhado a 512 bytes — obrigatório pelo lpmake
+            aligned_size = self._align_size(img.stat().st_size)
+            self.logger.debug(f"    {part_name}: {img.stat().st_size} → {aligned_size} bytes")
             cmd += [
-                "--partition", f"{part_name}_a:{img.stat().st_size}:{group}",
-                "--image", f"{part_name}_a={img}",
-                "--partition", f"{part_name}_b:0:{group.replace('_a', '_b')}",
+                "--partition", f"{part_name}_a:{aligned_size}:{group_a}",
+                "--image",     f"{part_name}_a={img}",
+                "--partition", f"{part_name}_b:0:{group_b}",
             ]
 
         cmd += ["--sparse", "--output", str(super_img)]
 
-        run_cmd(cmd, self.logger)
-        self.logger.info(f"  super.img: {super_img.stat().st_size // 1024 // 1024} MB")
-        return super_img
+        try:
+            run_cmd(cmd, self.logger)
+            size_mb = super_img.stat().st_size // 1024 // 1024
+            self.logger.info(f"  super.img gerado: {size_mb} MB")
+            return super_img
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr.strip() if e.stderr else "(sem mensagem)"
+            self.logger.error(f"  lpmake falhou: {stderr[:400]}")
+            return None
 
     def create_flashable_zip(self, super_img: Path) -> Path:
         """Cria um zip flashável via TWRP/Magisk."""
@@ -1245,10 +1546,32 @@ ui_print "Reiniciando..."
         self.logger.info("\n[STAGE 4] Empacotando ROM...")
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
+        # Verifica se as partições reais foram extraídas corretamente
+        # (se estiverem vazias, o mkfs.erofs vai gerar imagens mínimas)
+        empty_real = []
+        for part in REAL_PARTITIONS:
+            part_dir = self.target_dir / part
+            if part_dir.exists():
+                try:
+                    next(part_dir.iterdir())
+                except StopIteration:
+                    empty_real.append(part)
+        if empty_real:
+            self.logger.warning(
+                f"  ATENCAO: partições reais VAZIAS (extracao ext4 falhou): {empty_real}\n"
+                f"  O super.img sera gerado mas as partições estarao em branco no dispositivo.\n"
+                f"  Para corrigir, rode antes:\n"
+                f"    pip install ext4\n"
+                f"  Ou execute com Docker --privileged para mount loop funcionar."
+            )
+
         imgs = []
         all_parts = REAL_PARTITIONS + OPLUS_STUB_PARTITIONS
         for part in all_parts:
             part_dir = self.target_dir / part
+            # Ignora diretórios _mnt (artefatos de mount temporário)
+            if part.endswith("_mnt"):
+                continue
             if not part_dir.exists():
                 continue
             img = self.pack_partition_erofs(part, part_dir)
@@ -1264,7 +1587,7 @@ ui_print "Reiniciando..."
             if super_img:
                 self.create_flashable_zip(super_img)
         else:
-            self.logger.info("  Pack type 'payload' requer otatools — gerando super.img como fallback")
+            self.logger.info("  pack_type 'payload' — gerando super.img como fallback")
             self.pack_super(imgs)
 
         return True
