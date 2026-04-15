@@ -480,109 +480,68 @@ class SamsungStockExtractor:
 
     def _extract_ext4(self, img: Path, dest: Path) -> bool:
         """
-        Extrai ext4 com debugfs via stdin pipe — método confirmado como funcional
-        em servidores sem loop devices.
+        Extrai ext4 via debugfs rdump usando Popen (não subprocess.run).
 
-        Fallbacks: mount loop → 7z → ext4 Python
+        subprocess.run com capture_output=True trava em imagens grandes porque
+        o debugfs escreve muito no stderr e o buffer de 64KB fica cheio,
+        causando deadlock. Popen com comunicação via thread resolve isso.
         """
         self.logger.info(f"  ext4: {img.name} → {dest.name}/")
         dest.mkdir(parents=True, exist_ok=True)
 
-        # ── Método 1: debugfs via stdin pipe (mais confiável sem root) ────────
-        # Sintaxe: echo "rdump / /dest" | debugfs image.img
-        # NOTA: o destino precisa existir antes e ser passado como path absoluto
         debugfs = shutil.which("debugfs")
-        if debugfs:
-            # rdump exige que o destino exista previamente
-            dest.mkdir(parents=True, exist_ok=True)
-            cmd_input = f'rdump / "{dest.resolve()}"'
-            r = subprocess.run(
-                [debugfs, str(img)],
-                input=cmd_input,
-                capture_output=True,
-                text=True
-            )
-            # debugfs sempre retorna 0; checa se extraiu algo real (além de lost+found)
-            extracted = [f for f in dest.iterdir()
-                         if f.name not in ("lost+found", ".", "..")]
-            if extracted:
-                self.logger.info(f"  debugfs pipe OK: {img.name} ({len(extracted)} itens)")
-                return True
-            else:
-                self.logger.debug(f"  debugfs pipe: sem arquivos extraídos. stderr: {r.stderr[:200]}")
+        if not debugfs:
+            self.logger.error("  debugfs não encontrado! sudo apt install e2fsprogs")
+            return False
 
-        # ── Método 2: mount loop (funciona em host com loop devices) ──────────
-        mount_pt = dest.parent / f"{dest.name}_mnt"
-        mount_pt.mkdir(parents=True, exist_ok=True)
-        r2 = subprocess.run(
-            ["sudo", "mount", "-o", "loop,ro", str(img), str(mount_pt)],
-            capture_output=True, text=True
+        cmd_input = f'rdump / "{dest.resolve()}"\n'
+
+        import threading
+
+        proc = subprocess.Popen(
+            [debugfs, str(img)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
-        if r2.returncode == 0:
-            self.logger.info(f"  mount loop OK: {img.name}")
-            rsync = shutil.which("rsync")
-            ok = False
+
+        # Drena stdout e stderr em threads para evitar deadlock de buffer
+        stdout_buf, stderr_buf = [], []
+
+        def drain(pipe, buf):
             try:
-                if rsync:
-                    r3 = subprocess.run(
-                        [rsync, "-a", "--no-owner", "--no-group",
-                         str(mount_pt) + "/", str(dest) + "/"],
-                        capture_output=True, text=True
-                    )
-                    ok = r3.returncode == 0
-                if not ok:
-                    shutil.copytree(str(mount_pt), str(dest),
-                                    symlinks=True, dirs_exist_ok=True)
-                    ok = True
-            finally:
-                subprocess.run(["sudo", "umount", str(mount_pt)], capture_output=True)
-                try:
-                    mount_pt.rmdir()
-                except Exception:
-                    pass
-            if ok:
-                return True
-        else:
-            self.logger.debug(f"  mount falhou: {r2.stderr.strip()[:120]}")
-            try:
-                mount_pt.rmdir()
+                for line in pipe:
+                    buf.append(line)
             except Exception:
                 pass
 
-        # ── Método 3: 7z ─────────────────────────────────────────────────────
-        for sevenzip in ["7z", "7za", "7zr"]:
-            bin7z = shutil.which(sevenzip)
-            if bin7z:
-                self.logger.info(f"  Tentando {sevenzip}...")
-                r4 = subprocess.run(
-                    [bin7z, "x", str(img), f"-o{dest}", "-y"],
-                    capture_output=True, text=True
-                )
-                if r4.returncode == 0 and any(dest.iterdir()):
-                    return True
-                break
+        t1 = threading.Thread(target=drain, args=(proc.stdout, stdout_buf), daemon=True)
+        t2 = threading.Thread(target=drain, args=(proc.stderr, stderr_buf), daemon=True)
+        t1.start(); t2.start()
 
-        # ── Método 4: ext4 Python puro ────────────────────────────────────────
+        proc.stdin.write(cmd_input.encode())
+        proc.stdin.close()
+
+        t1.join(); t2.join()
+        proc.wait()
+
+        # Verifica se extraiu algo real (além de lost+found)
         try:
-            import importlib
-            ext4_mod = importlib.import_module("ext4")
-            self.logger.info(f"  Tentando ext4 Python...")
-            with open(img, "rb") as f_img:
-                vol = ext4_mod.Volume(f_img)
-                self._ext4_extract_dir(vol.root, dest)
-            if any(dest.iterdir()):
-                return True
-        except ImportError:
-            pass
-        except Exception as e:
-            self.logger.debug(f"  ext4 Python falhou: {e}")
+            extracted = [f for f in dest.iterdir()
+                         if f.name not in ("lost+found",)]
+        except Exception:
+            extracted = []
 
+        if extracted:
+            self.logger.info(f"  debugfs OK: {img.name} ({len(extracted)} itens raiz)")
+            return True
+
+        # Log de debug para diagnóstico
+        stderr_text = b"".join(stderr_buf).decode("utf-8", errors="replace")
+        self.logger.debug(f"  debugfs stderr: {stderr_text[:300]}")
         self.logger.error(
-            f"  FALHA ao extrair {img.name}!\n"
-            f"  Este servidor nao tem loop devices. Instale:\n"
-            f"    pip install ext4       # extração Python pura, sem root\n"
-            f"    sudo apt install p7zip-full  # alternativa\n"
-            f"  Ou use Docker com --privileged para mount loop funcionar."
+            f"  FALHA ao extrair {img.name} — debugfs não extraiu arquivos.\n"
+            f"  Solução: execute o script com Docker --privileged para usar mount loop."
         )
         return False
 
@@ -1359,12 +1318,10 @@ class RomPacker:
         """
         Empacota uma partição como EROFS.
 
-        Regras:
-        - Partições reais (system/vendor/etc): SEM --fs-config-file nem --file-contexts.
-          O mkfs.erofs do bin/ incluso falha com fs_config externo nessas partições grandes.
-        - Partições oplus (my_*): COM fs_config gerado pelo S23Patcher, mas APENAS
-          se o arquivo fs_config não tiver entradas inválidas.
-        - Imagens de 0 bytes de rodadas anteriores são apagadas e recriadas.
+        IMPORTANTE: não usa --fs-config-file nem --file-contexts.
+        O mkfs.erofs incluso em bin/linux/x86_64/ é uma versão que não suporta
+        corretamente o canned fs_config para partições Android. Empacotar sem
+        esses flags produz imagens válidas que iniciam normalmente.
         """
         output_img = self.output_dir / f"{part_name}.img"
 
@@ -1375,56 +1332,41 @@ class RomPacker:
                                  f"({output_img.stat().st_size // 1024 // 1024} MB)")
                 return output_img
             else:
-                self.logger.warning(f"  {part_name}.img esta vazia (rodada anterior falhou) — apagando.")
+                self.logger.warning(f"  {part_name}.img vazia — apagando e recriando.")
                 output_img.unlink()
 
-        # Verifica se a partição tem conteúdo real
+        # Verifica conteúdo real
         if not part_dir.exists():
             self.logger.warning(f"  Skip {part_name}: diretorio nao existe")
             return None
         try:
-            first = next(part_dir.iterdir())  # noqa — só verifica se há algo
+            next(part_dir.iterdir())
         except StopIteration:
             self.logger.warning(f"  Skip {part_name}: diretorio vazio")
             return None
 
-        # Partições oplus sem fs_config gerado — não inclui no super
-        fs_config     = self.config_dir / f"{part_name}_fs_config"
-        file_contexts = self.config_dir / f"{part_name}_file_contexts"
-        if part_name in OPLUS_STUB_PARTITIONS:
-            if not fs_config.exists() or not file_contexts.exists():
-                self.logger.warning(f"  Skip {part_name}: sem fs_config gerado")
-                return None
-
         try:
             mkfs_erofs = self._get_tool("mkfs.erofs")
         except FileNotFoundError:
-            self.logger.error("mkfs.erofs nao encontrado! Instale erofs-utils.")
+            self.logger.error("  mkfs.erofs nao encontrado!")
             return None
 
-        cmd = [mkfs_erofs]
-
-        # fs_config/file_contexts APENAS para partições oplus
-        # (partições reais do Samsung não precisam e o mkfs.erofs falha com elas)
-        if part_name in OPLUS_STUB_PARTITIONS:
-            cmd += ["--fs-config-file", str(fs_config)]
-            cmd += ["--file-contexts",  str(file_contexts)]
-
-        cmd += [str(output_img), str(part_dir)]
+        # Sem --fs-config-file nem --file-contexts:
+        # o bin/mkfs.erofs desta versão não suporta canned fs_config corretamente
+        cmd = [mkfs_erofs, str(output_img), str(part_dir)]
 
         try:
             run_cmd(cmd, self.logger)
             size_mb = output_img.stat().st_size // 1024 // 1024
             if output_img.stat().st_size == 0:
-                self.logger.error(f"  mkfs.erofs produziu imagem vazia para {part_name}!")
-                output_img.unlink()
+                self.logger.error(f"  mkfs.erofs gerou imagem vazia para {part_name}!")
+                output_img.unlink(missing_ok=True)
                 return None
             self.logger.info(f"  EROFS: {part_name}.img ({size_mb} MB)")
             return output_img
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.strip() if e.stderr else "(sem mensagem)"
-            self.logger.error(f"  Falha ao empacotar {part_name}: {stderr[:300]}")
-            # Limpa arquivo parcial
+            self.logger.error(f"  Falha EROFS {part_name}: {stderr[:200]}")
             output_img.unlink(missing_ok=True)
             return None
 
