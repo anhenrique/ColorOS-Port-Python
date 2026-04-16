@@ -189,6 +189,8 @@ class SamsungStockExtractor:
             return "super_lz4"
         if name == "super.img":
             return "super_img"
+        if name.endswith(".tar.md5") or name.endswith(".tar"):
+            return "odin_tar"
         return "unknown"
 
     def _extract_payload(self, payload_path: Path, imgs_dir: Path):
@@ -200,6 +202,17 @@ class SamsungStockExtractor:
                         self.logger, stream=True)
                 return
         raise RuntimeError("payload-dumper-go não encontrado!")
+
+    def _extract_odin_tar(self, tar_path: Path, imgs_dir: Path):
+        """Extrai arquivo Odin .tar.md5 da Samsung"""
+        imgs_dir.mkdir(parents=True, exist_ok=True)
+        tar_cmd = shutil.which("tar")
+        if not tar_cmd:
+            raise RuntimeError("tar não encontrado no sistema!")
+
+        self.logger.info(f"  Extraindo {tar_path.name}...")
+        run_cmd([tar_cmd, "-xf", str(tar_path), "-C", str(imgs_dir)],
+                self.logger, stream=True)
 
     def _extract_ext4(self, img: Path, dest: Path) -> bool:
         self.logger.info(f"  ext4: {img.name} → {dest.name}/")
@@ -274,6 +287,16 @@ class SamsungStockExtractor:
                     with zf.open("payload.bin") as src, open(payload_path, "wb") as dst:
                         shutil.copyfileobj(src, dst, length=16 * 1024 * 1024)
             self._extract_payload(payload_path, imgs_dir)
+
+        elif input_type == "odin_tar":
+            self.logger.info("  Samsung Odin TAR detectado...")
+            work.mkdir(parents=True, exist_ok=True)
+            self._extract_odin_tar(base_input, work)
+            # Mover as imagens extraídas para imgs_dir
+            for img_file in work.glob("*.img*"):
+                dest = imgs_dir / img_file.name
+                if not dest.exists():
+                    shutil.move(str(img_file), str(dest))
         else:
             raise ValueError(f"Formato não suportado: {input_type}")
 
