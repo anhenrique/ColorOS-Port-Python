@@ -1,0 +1,311 @@
+root@HML-HS-APP:~/ColorOS-Port-Python# sudo rm -rf build_s23/
+root@HML-HS-APP:~/ColorOS-Port-Python# ./start.sh 
+🚀 Iniciando o processo de portabilidade para o DM1Q (Android 16)...
+10:08:49 [INFO] ============================================================
+10:08:49 [INFO]   ColorOS Port — Samsung Galaxy S23 Series
+10:08:49 [INFO] ============================================================
+10:08:49 [INFO]   Dispositivo: Galaxy S23 (dm1q)
+10:08:49 [INFO]   Modelo:      SM-S911B
+10:08:49 [INFO]   Super size:  9.0 GB
+10:08:49 [INFO] 
+[STAGE 1a] Preparando Base ROM (Stock Samsung One UI)...
+10:08:49 [INFO]   Tipo de input detectado: ap_tar
+10:08:49 [INFO]   [2/5] Extraindo super.img.lz4 do AP_*.tar.md5...
+10:08:49 [INFO]   Abrindo AP_S911BXXS9EZC1_S911BXXS9EZC1_MQB107205664_REV00_user_low_ship_MULTI_CERT_meta_OS16.tar.md5 (15613 MB)...
+10:08:49 [INFO]   Extraindo: super.img.lz4
+10:09:34 [INFO]   super.img.lz4: 9363 MB
+10:09:34 [INFO]   [3/5] Descomprimindo LZ4...
+10:09:34 [INFO]   Usando /usr/local/bin/lz4...
+10:09:55 [INFO]   super.img: 10499 MB
+10:09:55 [INFO]   [4/5] Convertendo sparse → raw (simg2img)...
+10:10:43 [INFO]   super_raw.img: 11698 MB
+10:10:43 [INFO]   [5/5] Extraindo partições com lpunpack...
+10:11:31 [INFO]   Partições extraídas: ['odm', 'product', 'system', 'system_dlkm', 'vendor_dlkm', 'system_ext', 'vendor']
+10:11:31 [INFO]   ext4: system.img → system/
+10:11:31 [INFO]   Tentando 7z...
+10:11:32 [INFO]   Tentando ext4 Python...
+10:11:32 [ERROR]   FALHA ao extrair system.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:11:32 [INFO]   ext4: system_ext.img → system_ext/
+10:11:32 [INFO]   Tentando 7z...
+10:11:32 [INFO]   Tentando ext4 Python...
+10:11:32 [ERROR]   FALHA ao extrair system_ext.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:11:32 [INFO]   ext4: vendor.img → vendor/
+10:11:32 [INFO]   Tentando 7z...
+10:11:32 [INFO]   Tentando ext4 Python...
+10:11:32 [ERROR]   FALHA ao extrair vendor.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:11:32 [INFO]   ext4: product.img → product/
+10:11:32 [INFO]   Tentando 7z...
+10:11:32 [INFO]   Tentando ext4 Python...
+10:11:32 [ERROR]   FALHA ao extrair product.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:11:32 [INFO]   ext4: odm.img → odm/
+10:11:32 [INFO]   Tentando 7z...
+10:11:32 [INFO]   Tentando ext4 Python...
+10:11:32 [ERROR]   FALHA ao extrair odm.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:11:32 [INFO]   ext4: vendor_dlkm.img → vendor_dlkm/
+10:11:32 [INFO]   Tentando 7z...
+10:11:32 [INFO]   Tentando ext4 Python...
+10:11:32 [ERROR]   FALHA ao extrair vendor_dlkm.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:11:32 [INFO]   ext4: system_dlkm.img → system_dlkm/
+10:11:33 [INFO]   Tentando 7z...
+10:11:33 [INFO]   Tentando ext4 Python...
+10:11:33 [ERROR]   FALHA ao extrair system_dlkm.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:11:33 [INFO]   Base pronta: ['vendor_dlkm', 'odm', 'system_dlkm', 'product', 'vendor', 'system', 'system_ext']
+10:11:33 [INFO] 
+[STAGE 1b] Preparando Port ROM (ColorOS)...
+10:11:33 [INFO]   Tipo: payload_zip
+10:11:33 [INFO]   Extraindo payload.bin do port...
+10:11:59 [INFO]   Usando payload-dumper-go (isso pode demorar vários minutos)...
+10:13:46 [INFO]   ext4: system.img → system/
+10:13:46 [INFO]   Tentando 7z...
+10:13:46 [INFO]   Tentando ext4 Python...
+10:13:46 [ERROR]   FALHA ao extrair system.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:13:47 [INFO]   ext4: system_ext.img → system_ext/
+10:13:47 [INFO]   Tentando 7z...
+10:13:47 [INFO]   Tentando ext4 Python...
+10:13:47 [ERROR]   FALHA ao extrair system_ext.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:13:47 [INFO]   ext4: vendor.img → vendor/
+10:13:47 [INFO]   Tentando 7z...
+10:13:47 [INFO]   Tentando ext4 Python...
+10:13:47 [ERROR]   FALHA ao extrair vendor.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:13:47 [INFO]   ext4: product.img → product/
+10:13:47 [INFO]   Tentando 7z...
+10:13:47 [INFO]   Tentando ext4 Python...
+10:13:47 [ERROR]   FALHA ao extrair product.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:13:47 [INFO]   ext4: odm.img → odm/
+10:13:47 [INFO]   Tentando 7z...
+10:13:47 [INFO]   Tentando ext4 Python...
+10:13:47 [ERROR]   FALHA ao extrair odm.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:13:47 [INFO]   ext4: vendor_dlkm.img → vendor_dlkm/
+10:13:48 [INFO]   debugfs pipe OK: vendor_dlkm.img (2 itens)
+10:13:48 [INFO]   ext4: system_dlkm.img → system_dlkm/
+10:13:48 [INFO]   debugfs pipe OK: system_dlkm.img (2 itens)
+10:13:48 [INFO]   ext4: my_product.img → my_product/
+10:13:48 [INFO]   Tentando 7z...
+10:13:48 [INFO]   Tentando ext4 Python...
+10:13:48 [ERROR]   FALHA ao extrair my_product.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:13:48 [INFO]   ext4: my_manifest.img → my_manifest/
+10:13:48 [INFO]   Tentando 7z...
+10:13:48 [INFO]   Tentando ext4 Python...
+10:13:48 [ERROR]   FALHA ao extrair my_manifest.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:13:48 [INFO]   ext4: my_engineering.img → my_engineering/
+10:13:48 [INFO]   Tentando 7z...
+10:13:48 [INFO]   Tentando ext4 Python...
+10:13:48 [ERROR]   FALHA ao extrair my_engineering.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:13:48 [INFO]   ext4: my_carrier.img → my_carrier/
+10:13:48 [INFO]   Tentando 7z...
+10:13:48 [INFO]   Tentando ext4 Python...
+10:13:48 [ERROR]   FALHA ao extrair my_carrier.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:13:48 [INFO]   ext4: my_region.img → my_region/
+10:13:48 [INFO]   Tentando 7z...
+10:13:48 [INFO]   Tentando ext4 Python...
+10:13:48 [ERROR]   FALHA ao extrair my_region.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:13:48 [INFO]   ext4: my_heytap.img → my_heytap/
+10:13:49 [INFO]   Tentando 7z...
+10:13:49 [INFO]   Tentando ext4 Python...
+10:13:49 [ERROR]   FALHA ao extrair my_heytap.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:13:49 [INFO]   ext4: my_stock.img → my_stock/
+10:13:49 [INFO]   Tentando 7z...
+10:13:49 [INFO]   Tentando ext4 Python...
+10:13:49 [ERROR]   FALHA ao extrair my_stock.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:13:49 [INFO]   ext4: my_bigball.img → my_bigball/
+10:13:49 [INFO]   Tentando 7z...
+10:13:49 [INFO]   Tentando ext4 Python...
+10:13:49 [ERROR]   FALHA ao extrair my_bigball.img!
+  Este servidor nao tem loop devices. Instale:
+    pip install ext4       # extração Python pura, sem root
+    sudo apt install p7zip-full  # alternativa
+  Ou use Docker com --privileged para mount loop funcionar.
+10:13:49 [INFO]   Port pronto: ['my_stock', 'my_region', 'my_product', 'vendor_dlkm', 'odm', 'my_engineering', 'my_carrier', 'system_dlkm', 'my_bigball', 'product', 'vendor', 'my_manifest', 'system', 'system_ext', 'my_heytap']
+10:13:49 [INFO] 
+[STAGE 2] Merge das partições...
+10:13:49 [INFO]   Copiando system → target/system
+10:13:49 [INFO]   Copiando system_ext → target/system_ext
+10:13:49 [INFO]   Copiando vendor → target/vendor
+10:13:49 [INFO]   Copiando product → target/product
+10:13:49 [INFO]   Copiando odm → target/odm
+10:13:49 [INFO]   Copiando vendor_dlkm → target/vendor_dlkm
+10:13:49 [INFO]   Copiando system_dlkm → target/system_dlkm
+10:13:49 [INFO]   Copiando my_product → target/my_product
+10:13:49 [INFO]   Copiando my_manifest → target/my_manifest
+10:13:49 [INFO]   Copiando my_engineering → target/my_engineering
+10:13:49 [INFO]   Copiando my_carrier → target/my_carrier
+10:13:49 [INFO]   Copiando my_region → target/my_region
+10:13:49 [INFO]   Copiando my_heytap → target/my_heytap
+10:13:49 [INFO]   Copiando my_stock → target/my_stock
+10:13:49 [INFO]   Copiando my_bigball → target/my_bigball
+10:13:49 [INFO]   Aplicando overlay ColorOS...
+10:13:49 [INFO]   Merge completo: 15 particoes
+10:13:49 [INFO] 
+[STAGE 3] Aplicando patches S23...
+10:13:49 [INFO]   [3.1] Criando stubs de partições oplus...
+10:13:49 [INFO]     Stub: my_product
+10:13:49 [INFO]     Stub: my_manifest
+10:13:49 [INFO]     Stub: my_engineering
+10:13:49 [INFO]     Stub: my_company
+10:13:49 [INFO]     Stub: my_carrier
+10:13:49 [INFO]     Stub: my_region
+10:13:49 [INFO]     Stub: my_heytap
+10:13:49 [INFO]     Stub: my_stock
+10:13:49 [INFO]     Stub: my_preload
+10:13:49 [INFO]     Stub: my_bigball
+10:13:49 [INFO]   [3.2] Substituindo strings do dispositivo...
+10:13:49 [INFO]     0 arquivos atualizados.
+10:13:49 [INFO]   [3.3] Corrigindo propriedades do S23...
+10:13:49 [INFO]     Propriedades aplicadas em 1 partições.
+10:13:49 [INFO]   [3.4] Regenerando fingerprint...
+10:13:49 [INFO]     Fingerprint: samsung/dm1q/dm1q:15/AP3A.240905.015/S911BXXU7EXJ1:user/release-keys
+10:13:49 [INFO]     Fingerprint aplicado em 10 arquivos.
+10:13:49 [INFO]   [3.5] Removendo bloatware OnePlus incompatível...
+10:13:49 [INFO]     0 itens removidos.
+10:13:49 [INFO]   [3.6] Aplicando SELinux da base Samsung...
+10:13:49 [INFO] 
+[STAGE 4] Empacotando ROM...
+10:13:49 [INFO]   EROFS: system.img (0 MB)
+10:13:49 [INFO]   EROFS: system_ext.img (45 MB)
+10:13:49 [INFO]   EROFS: vendor.img (0 MB)
+10:13:49 [INFO]   EROFS: product.img (0 MB)
+10:13:49 [INFO]   EROFS: odm.img (0 MB)
+10:13:49 [INFO]   EROFS: vendor_dlkm.img (0 MB)
+10:13:49 [INFO]   EROFS: system_dlkm.img (0 MB)
+10:13:49 [ERROR] Falhou: bin/linux/x86_64/mkfs.erofs --fs-config-file build_s23/config/my_product_fs_config --file-contexts build_s23/config/my_product_file_contexts build_s23/output/my_product.img build_s23/target/my_product
+10:13:49 [ERROR] failed to find  in canned fs_config
+
+10:13:49 [ERROR]   Falha ao empacotar my_product: (sem mensagem)
+10:13:49 [ERROR] Falhou: bin/linux/x86_64/mkfs.erofs --fs-config-file build_s23/config/my_manifest_fs_config --file-contexts build_s23/config/my_manifest_file_contexts build_s23/output/my_manifest.img build_s23/target/my_manifest
+10:13:49 [ERROR] failed to find  in canned fs_config
+
+10:13:49 [ERROR]   Falha ao empacotar my_manifest: (sem mensagem)
+10:13:49 [ERROR] Falhou: bin/linux/x86_64/mkfs.erofs --fs-config-file build_s23/config/my_engineering_fs_config --file-contexts build_s23/config/my_engineering_file_contexts build_s23/output/my_engineering.img build_s23/target/my_engineering
+10:13:49 [ERROR] failed to find  in canned fs_config
+
+10:13:49 [ERROR]   Falha ao empacotar my_engineering: (sem mensagem)
+10:13:49 [ERROR] Falhou: bin/linux/x86_64/mkfs.erofs --fs-config-file build_s23/config/my_company_fs_config --file-contexts build_s23/config/my_company_file_contexts build_s23/output/my_company.img build_s23/target/my_company
+10:13:49 [ERROR] failed to find  in canned fs_config
+
+10:13:49 [ERROR]   Falha ao empacotar my_company: (sem mensagem)
+10:13:49 [ERROR] Falhou: bin/linux/x86_64/mkfs.erofs --fs-config-file build_s23/config/my_carrier_fs_config --file-contexts build_s23/config/my_carrier_file_contexts build_s23/output/my_carrier.img build_s23/target/my_carrier
+10:13:49 [ERROR] failed to find  in canned fs_config
+
+10:13:49 [ERROR]   Falha ao empacotar my_carrier: (sem mensagem)
+10:13:49 [ERROR] Falhou: bin/linux/x86_64/mkfs.erofs --fs-config-file build_s23/config/my_region_fs_config --file-contexts build_s23/config/my_region_file_contexts build_s23/output/my_region.img build_s23/target/my_region
+10:13:49 [ERROR] failed to find  in canned fs_config
+
+10:13:49 [ERROR]   Falha ao empacotar my_region: (sem mensagem)
+10:13:49 [ERROR] Falhou: bin/linux/x86_64/mkfs.erofs --fs-config-file build_s23/config/my_heytap_fs_config --file-contexts build_s23/config/my_heytap_file_contexts build_s23/output/my_heytap.img build_s23/target/my_heytap
+10:13:49 [ERROR] failed to find  in canned fs_config
+
+10:13:49 [ERROR]   Falha ao empacotar my_heytap: (sem mensagem)
+10:13:49 [ERROR] Falhou: bin/linux/x86_64/mkfs.erofs --fs-config-file build_s23/config/my_stock_fs_config --file-contexts build_s23/config/my_stock_file_contexts build_s23/output/my_stock.img build_s23/target/my_stock
+10:13:49 [ERROR] failed to find  in canned fs_config
+
+10:13:49 [ERROR]   Falha ao empacotar my_stock: (sem mensagem)
+10:13:49 [ERROR] Falhou: bin/linux/x86_64/mkfs.erofs --fs-config-file build_s23/config/my_preload_fs_config --file-contexts build_s23/config/my_preload_file_contexts build_s23/output/my_preload.img build_s23/target/my_preload
+10:13:49 [ERROR] failed to find  in canned fs_config
+
+10:13:49 [ERROR]   Falha ao empacotar my_preload: (sem mensagem)
+10:13:50 [ERROR] Falhou: bin/linux/x86_64/mkfs.erofs --fs-config-file build_s23/config/my_bigball_fs_config --file-contexts build_s23/config/my_bigball_file_contexts build_s23/output/my_bigball.img build_s23/target/my_bigball
+10:13:50 [ERROR] failed to find  in canned fs_config
+
+10:13:50 [ERROR]   Falha ao empacotar my_bigball: (sem mensagem)
+10:13:50 [INFO]   Partições validas: 7 | Total: 46 MB / 9216 MB
+10:13:50 [ERROR] Falhou: bin/linux/x86_64/lpmake --metadata-size 65536 --super-name super --metadata-slots 2 --device super:9663676416 --group qti_dynamic_partitions_a:9663676416 --group qti_dynamic_partitions_b:0 --partition system_a:339968:qti_dynamic_partitions_a --image system_a=build_s23/output/system.img --partition system_b:0:qti_dynamic_partitions_b --partition system_ext_a:47665152:qti_dynamic_partitions_a --image system_ext_a=build_s23/output/system_ext.img --partition system_ext_b:0:qti_dynamic_partitions_b --partition vendor_a:786432:qti_dynamic_partitions_a --image vendor_a=build_s23/output/vendor.img --partition vendor_b:0:qti_dynamic_partitions_b --partition product_a:4096:qti_dynamic_partitions_a --image product_a=build_s23/output/product.img --partition product_b:0:qti_dynamic_partitions_b --partition odm_a:16384:qti_dynamic_partitions_a --image odm_a=build_s23/output/odm.img --partition odm_b:0:qti_dynamic_partitions_b --partition vendor_dlkm_a:126976:qti_dynamic_partitions_a --image vendor_dlkm_a=build_s23/output/vendor_dlkm.img --partition vendor_dlkm_b:0:qti_dynamic_partitions_b --partition system_dlkm_a:32768:qti_dynamic_partitions_a --image system_dlkm_a=build_s23/output/system_dlkm.img --partition system_dlkm_b:0:qti_dynamic_partitions_b --sparse --output build_s23/output/super.img
+10:13:50 [ERROR] Partition must have a valid size.
+
+10:13:50 [ERROR]   lpmake falhou: (sem mensagem)
+10:13:50 [INFO] 
+============================================================
+10:13:50 [INFO]   PORT CONCLUÍDO!
+10:13:50 [INFO]   Output: build_s23/output
+10:13:50 [INFO] ============================================================
+10:13:50 [INFO] 
+PRÓXIMOS PASSOS:
+  1. Verifique o zip em output/
+  2. Boot no TWRP (ou outro recovery compatível com dm1q)
+  3. Wipe: Dalvik, Cache, System, Data (NÃO wipe Vendor!)
+  4. Flash o zip gerado
+  5. Reboot
+
+ATENÇÃO — Stock Samsung como base:
+  - Knox será trigado ao modificar partições (normal num port)
+  - A câmera stock Samsung FUNCIONARÁ (blobs originais)
+  - Modem/RIL vem da stock — sem problemas de sinal
+  - Se bootloop: verifique se a versão do Android da stock
+    é compatível com a do ColorOS (mesmo major version)
+
+root@HML-HS-APP:~/ColorOS-Port-Python# 
