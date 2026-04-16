@@ -291,9 +291,10 @@ class SamsungStockExtractor:
         elif input_type == "odin_tar":
             self.logger.info("  Samsung Odin TAR detectado...")
             work.mkdir(parents=True, exist_ok=True)
+            imgs_dir.mkdir(parents=True, exist_ok=True)
             self._extract_odin_tar(base_input, work)
-            # Mover as imagens extraídas para imgs_dir
-            for img_file in work.glob("*.img*"):
+            # Mover apenas imagens .img (não .img.lz4) para imgs_dir
+            for img_file in work.glob("*.img"):
                 dest = imgs_dir / img_file.name
                 if not dest.exists():
                     shutil.move(str(img_file), str(dest))
