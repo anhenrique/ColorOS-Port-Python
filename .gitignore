@@ -37,7 +37,8 @@ devices/**/*.so
 devices/**/*.bin  
 devices/chipset/SM8350/*  
 devices/chipset/SM8450/assets/
-devices/target/dm1q/patch/*
+devices/target/dm1q/patch/**
+Firmware_extractor/*
 
 !devices/**/override/**
 *.log
